@@ -91,6 +91,30 @@ describe('PrometheusMetricsService', () => {
 			});
 		});
 
+		it('should set up `n8n_last_activity`', async () => {
+			await prometheusMetricsService.init(app);
+
+			expect(promClient.Gauge).toHaveBeenNthCalledWith(2, {
+				name: 'n8n_last_activity',
+				help: 'last user activity (backend call).',
+				labelNames: ['timestamp'],
+			});
+
+			expect(app.use).toHaveBeenCalledWith(
+				[
+					'/rest/',
+					'/api/',
+					'/webhook/',
+					'/webhook-waiting/',
+					'/webhook-test/',
+					'/form/',
+					'/form-waiting/',
+					'/form-test/',
+				],
+				expect.any(Function),
+			);
+		});
+
 		it('should set up default metrics collection with `prom-client`', async () => {
 			prometheusMetricsService.enableMetric('default');
 			await prometheusMetricsService.init(app);
@@ -204,7 +228,7 @@ describe('PrometheusMetricsService', () => {
 
 			await prometheusMetricsService.init(app);
 
-			expect(promClient.Gauge).toHaveBeenCalledTimes(1); // version metric
+			expect(promClient.Gauge).toHaveBeenCalledTimes(2); // version metric + last user activity metric
 			expect(promClient.Counter).toHaveBeenCalledTimes(0); // cache metrics
 			expect(eventService.on).not.toHaveBeenCalled();
 		});
@@ -217,7 +241,7 @@ describe('PrometheusMetricsService', () => {
 
 			await prometheusMetricsService.init(app);
 
-			expect(promClient.Gauge).toHaveBeenCalledTimes(1); // version metric
+			expect(promClient.Gauge).toHaveBeenCalledTimes(2); // version metric + last user activity metric
 			expect(promClient.Counter).toHaveBeenCalledTimes(0); // cache metrics
 			expect(eventService.on).not.toHaveBeenCalled();
 		});
