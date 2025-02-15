@@ -23,7 +23,7 @@ export class OAuth2CredentialController extends AbstractOAuthController {
 	async getAuthUri(req: OAuthRequest.OAuth2Credential.Auth): Promise<string> {
 		const credential = await this.getCredential(req);
 		const additionalData = await this.getAdditionalData();
-		const decryptedDataOriginal = await this.getDecryptedData(credential, additionalData);
+		const decryptedDataOriginal = await this.getDecryptedDataForAuthUri(credential, additionalData);
 
 		// At some point in the past we saved hidden scopes to credentials (but shouldn't)
 		// Delete scope before applying defaults to make sure new scopes are present on reconnect
@@ -133,7 +133,7 @@ export class OAuth2CredentialController extends AbstractOAuthController {
 				set(oauthToken.data, 'callbackQueryString', omit(req.query, 'state', 'code'));
 			}
 
-			if (decryptedDataOriginal.oauthTokenData) {
+			if (typeof decryptedDataOriginal.oauthTokenData === 'object') {
 				// Only overwrite supplied data as some providers do for example just return the
 				// refresh_token on the very first request and not on subsequent ones.
 				Object.assign(decryptedDataOriginal.oauthTokenData, oauthToken.data);

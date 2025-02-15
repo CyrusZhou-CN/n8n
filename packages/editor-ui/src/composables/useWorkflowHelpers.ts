@@ -70,7 +70,7 @@ import { useTagsStore } from '@/stores/tags.store';
 import { useWorkflowsEEStore } from '@/stores/workflows.ee.store';
 import { useNpsSurveyStore } from '@/stores/npsSurvey.store';
 
-type ResolveParameterOptions = {
+export type ResolveParameterOptions = {
 	targetItem?: TargetItem;
 	inputNodeName?: string;
 	inputRunIndex?: number;
@@ -518,7 +518,6 @@ export function useWorkflowHelpers(options: { router: ReturnType<typeof useRoute
 
 		const nodes: INode[] = [];
 		for (let nodeIndex = 0; nodeIndex < workflowNodes.length; nodeIndex++) {
-			// @ts-ignore
 			nodeData = getNodeDataToSave(workflowNodes[nodeIndex]);
 
 			nodes.push(nodeData);
@@ -1001,9 +1000,10 @@ export function useWorkflowHelpers(options: { router: ReturnType<typeof useRoute
 			}
 
 			if (redirect) {
-				void router.replace({
+				await router.replace({
 					name: VIEWS.WORKFLOW,
-					params: { name: workflowData.id, action: 'workflowSave' },
+					params: { name: workflowData.id },
+					query: { action: 'workflowSave' },
 				});
 			}
 

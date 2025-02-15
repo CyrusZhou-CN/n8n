@@ -34,6 +34,7 @@ import { getOptionalOutputParsers } from '@utils/output_parsers/N8nOutputParser'
 import { getTemplateNoticeField } from '@utils/sharedFields';
 import { getTracingConfig } from '@utils/tracing';
 
+import { dataUriFromImageData, UnsupportedMimeTypeError } from './utils';
 import {
 	getCustomErrorMessage as getCustomOpenAiErrorMessage,
 	isOpenAiError,
@@ -88,21 +89,28 @@ async function getImageMessage(
 		NodeConnectionType.AiLanguageModel,
 		0,
 	)) as BaseLanguageModel;
-	const dataURI = `data:image/jpeg;base64,${bufferData.toString('base64')}`;
 
-	const directUriModels = [ChatGoogleGenerativeAI, ChatOllama];
-	const imageUrl = directUriModels.some((i) => model instanceof i)
-		? dataURI
-		: { url: dataURI, detail };
+	try {
+		const dataURI = dataUriFromImageData(binaryData, bufferData);
 
-	return new HumanMessage({
-		content: [
-			{
-				type: 'image_url',
-				image_url: imageUrl,
-			},
-		],
-	});
+		const directUriModels = [ChatGoogleGenerativeAI, ChatOllama];
+		const imageUrl = directUriModels.some((i) => model instanceof i)
+			? dataURI
+			: { url: dataURI, detail };
+
+		return new HumanMessage({
+			content: [
+				{
+					type: 'image_url',
+					image_url: imageUrl,
+				},
+			],
+		});
+	} catch (error) {
+		if (error instanceof UnsupportedMimeTypeError)
+			throw new NodeOperationError(context.getNode(), error.message);
+		throw error;
+	}
 }
 
 async function getChainPromptTemplate(
@@ -254,6 +262,7 @@ export class ChainLlm implements INodeType {
 		displayName: 'Basic LLM Chain',
 		name: 'chainLlm',
 		icon: 'fa:link',
+		iconColor: 'black',
 		group: ['transform'],
 		version: [1, 1.1, 1.2, 1.3, 1.4, 1.5],
 		description: 'A simple chain to prompt a large language model',

@@ -5,9 +5,9 @@ import type {
 	INodeTypeBaseDescription,
 } from 'n8n-workflow';
 
-import { listSearch } from './methods';
 import { router } from './actions/router';
 import { versionDescription } from './actions/versionDescription';
+import { listSearch } from './methods';
 
 export class MicrosoftTeamsV2 implements INodeType {
 	description: INodeTypeDescription;
@@ -16,6 +16,7 @@ export class MicrosoftTeamsV2 implements INodeType {
 		this.description = {
 			...baseDescription,
 			...versionDescription,
+			usableAsTool: true,
 		};
 	}
 

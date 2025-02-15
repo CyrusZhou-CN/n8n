@@ -87,6 +87,7 @@ export interface FrontendSettings {
 		};
 	};
 	publicApi: {
+		apiKeysPerUserLimit: number;
 		enabled: boolean;
 		latestVersion: number;
 		path: string;
@@ -163,6 +164,10 @@ export interface FrontendSettings {
 		pruneTime: number;
 		licensePruneTime: number;
 	};
+	aiCredits: {
+		enabled: boolean;
+		credits: number;
+	};
 	pruning?: {
 		isEnabled: boolean;
 		maxAge: number;
@@ -173,4 +178,8 @@ export interface FrontendSettings {
 	};
 	betaFeatures: FrontendBetaFeatures[];
 	easyAIWorkflowOnboarded: boolean;
+	partialExecution: {
+		version: 1 | 2;
+		enforce: boolean;
+	};
 }

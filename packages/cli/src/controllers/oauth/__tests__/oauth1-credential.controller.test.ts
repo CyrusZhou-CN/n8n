@@ -1,9 +1,11 @@
+import { Container } from '@n8n/di';
 import Csrf from 'csrf';
 import type { Response } from 'express';
 import { mock } from 'jest-mock-extended';
 import { Cipher } from 'n8n-core';
+import { Logger } from 'n8n-core';
+import type { IWorkflowExecuteAdditionalData } from 'n8n-workflow';
 import nock from 'nock';
-import Container from 'typedi';
 
 import { Time } from '@/constants';
 import { OAuth1CredentialController } from '@/controllers/oauth/oauth1-credential.controller';
@@ -12,14 +14,16 @@ import type { CredentialsEntity } from '@/databases/entities/credentials-entity'
 import type { User } from '@/databases/entities/user';
 import { CredentialsRepository } from '@/databases/repositories/credentials.repository';
 import { SharedCredentialsRepository } from '@/databases/repositories/shared-credentials.repository';
-import { VariablesService } from '@/environments/variables/variables.service.ee';
+import { VariablesService } from '@/environments.ee/variables/variables.service.ee';
 import { BadRequestError } from '@/errors/response-errors/bad-request.error';
 import { NotFoundError } from '@/errors/response-errors/not-found.error';
 import { ExternalHooks } from '@/external-hooks';
-import { Logger } from '@/logging/logger.service';
 import type { OAuthRequest } from '@/requests';
-import { SecretsHelper } from '@/secrets-helpers';
+import { SecretsHelper } from '@/secrets-helpers.ee';
+import * as WorkflowExecuteAdditionalData from '@/workflow-execute-additional-data';
 import { mockInstance } from '@test/mocking';
+
+jest.mock('@/workflow-execute-additional-data');
 
 describe('OAuth1CredentialController', () => {
 	mockInstance(Logger);
@@ -28,6 +32,9 @@ describe('OAuth1CredentialController', () => {
 	mockInstance(VariablesService, {
 		getAllCached: async () => [],
 	});
+	const additionalData = mock<IWorkflowExecuteAdditionalData>();
+	(WorkflowExecuteAdditionalData.getBase as jest.Mock).mockReturnValue(additionalData);
+
 	const cipher = mockInstance(Cipher);
 	const credentialsHelper = mockInstance(CredentialsHelper);
 	const credentialsRepository = mockInstance(CredentialsRepository);
@@ -106,6 +113,14 @@ describe('OAuth1CredentialController', () => {
 				}),
 			);
 			expect(cipher.encrypt).toHaveBeenCalledWith({ csrfSecret });
+			expect(credentialsHelper.getDecrypted).toHaveBeenCalledWith(
+				additionalData,
+				credential,
+				credential.type,
+				'internal',
+				undefined,
+				false,
+			);
 		});
 	});
 
@@ -235,6 +250,14 @@ describe('OAuth1CredentialController', () => {
 				}),
 			);
 			expect(res.render).toHaveBeenCalledWith('oauth-callback');
+			expect(credentialsHelper.getDecrypted).toHaveBeenCalledWith(
+				additionalData,
+				credential,
+				credential.type,
+				'internal',
+				undefined,
+				true,
+			);
 		});
 	});
 });

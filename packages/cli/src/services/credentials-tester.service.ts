@@ -3,8 +3,16 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
+import { Service } from '@n8n/di';
 import get from 'lodash/get';
-import { ErrorReporter, NodeExecuteFunctions, RoutingNode } from 'n8n-core';
+import {
+	CredentialTestContext,
+	ErrorReporter,
+	ExecuteContext,
+	Logger,
+	RoutingNode,
+	isObjectLiteral,
+} from 'n8n-core';
 import type {
 	ICredentialsDecrypted,
 	ICredentialTestFunction,
@@ -22,19 +30,17 @@ import type {
 	INodeTypes,
 	ICredentialTestFunctions,
 	IDataObject,
+	IExecuteData,
 } from 'n8n-workflow';
 import { VersionedNodeType, NodeHelpers, Workflow, ApplicationError } from 'n8n-workflow';
-import { Service } from 'typedi';
 
 import { CredentialTypes } from '@/credential-types';
 import type { User } from '@/databases/entities/user';
-import { Logger } from '@/logging/logger.service';
 import { NodeTypes } from '@/node-types';
 import * as WorkflowExecuteAdditionalData from '@/workflow-execute-additional-data';
 
 import { RESPONSE_ERROR_MESSAGES } from '../constants';
 import { CredentialsHelper } from '../credentials-helper';
-import { isObjectLiteral } from '../utils';
 
 const { OAUTH2_CREDENTIAL_TEST_SUCCEEDED, OAUTH2_CREDENTIAL_TEST_FAILED } = RESPONSE_ERROR_MESSAGES;
 
@@ -201,9 +207,8 @@ export class CredentialsTester {
 
 		if (typeof credentialTestFunction === 'function') {
 			// The credentials get tested via a function that is defined on the node
-			const credentialTestFunctions = NodeExecuteFunctions.getCredentialTestFunctions();
-
-			return credentialTestFunction.call(credentialTestFunctions, credentialsDecrypted);
+			const context = new CredentialTestContext();
+			return credentialTestFunction.call(context, credentialsDecrypted);
 		}
 
 		// Credentials get tested via request instructions
@@ -289,25 +294,24 @@ export class CredentialsTester {
 
 		const additionalData = await WorkflowExecuteAdditionalData.getBase(user.id, node.parameters);
 
-		const routingNode = new RoutingNode(
+		const executeData: IExecuteData = { node, data: {}, source: null };
+		const executeFunctions = new ExecuteContext(
 			workflow,
 			node,
-			connectionInputData,
-			runExecutionData ?? null,
 			additionalData,
 			mode,
+			runExecutionData,
+			runIndex,
+			connectionInputData,
+			inputData,
+			executeData,
+			[],
 		);
+		const routingNode = new RoutingNode(executeFunctions, nodeTypeCopy, credentialsDecrypted);
 
 		let response: INodeExecutionData[][] | null | undefined;
-
 		try {
-			response = await routingNode.runNode(
-				inputData,
-				runIndex,
-				nodeTypeCopy,
-				{ node, data: {}, source: null },
-				credentialsDecrypted,
-			);
+			response = await routingNode.runNode();
 		} catch (error) {
 			this.errorReporter.error(error);
 			// Do not fail any requests to allow custom error messages and

@@ -1,3 +1,9 @@
+import type { ImapSimple, ImapSimpleOptions, Message, MessagePart } from '@n8n/imap';
+import { connect as imapConnect, getParts } from '@n8n/imap';
+import find from 'lodash/find';
+import isEmpty from 'lodash/isEmpty';
+import type { Source as ParserSource } from 'mailparser';
+import { simpleParser } from 'mailparser';
 import type {
 	ITriggerFunctions,
 	IBinaryData,
@@ -14,14 +20,7 @@ import type {
 	JsonObject,
 } from 'n8n-workflow';
 import { NodeConnectionType, NodeOperationError, TriggerCloseError } from 'n8n-workflow';
-
-import type { ImapSimple, ImapSimpleOptions, Message, MessagePart } from '@n8n/imap';
-import { connect as imapConnect, getParts } from '@n8n/imap';
-import type { Source as ParserSource } from 'mailparser';
-import { simpleParser } from 'mailparser';
 import rfc2047 from 'rfc2047';
-import isEmpty from 'lodash/isEmpty';
-import find from 'lodash/find';
 
 import type { ICredentialsDataImap } from '../../../credentials/Imap.credentials';
 import { isCredentialsDataImap } from '../../../credentials/Imap.credentials';
@@ -86,7 +85,7 @@ const versionDescription: INodeTypeDescription = {
 		activationHint:
 			"Once you’ve finished building your workflow, <a data-key='activate'>activate</a> it to have it also listen continuously (you just won’t see those executions here).",
 	},
-
+	usableAsTool: true,
 	inputs: [],
 	outputs: [NodeConnectionType.Main],
 	credentials: [
