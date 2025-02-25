@@ -1710,8 +1710,11 @@ export interface INodeTypeBaseDescription {
 	usableAsTool?: true | AsToolProps;
 }
 
-// Properties that are merged (objects) or replaced (values) if the node is used as a tool
-export type AsToolProps = Partial<INodeTypeBaseDescription>;
+/**
+ * NodeDescription props that are merged (most objects) or replaced
+ * (values and codex.subcategories.Tools) if the node is used as a tool
+ */
+export type AsToolProps = Partial<Omit<INodeTypeBaseDescription, 'usableAsTool'>>;
 
 export interface INodePropertyRouting {
 	operations?: IN8nRequestOperations; // Should be changed, does not sound right
