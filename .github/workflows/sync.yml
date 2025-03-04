@@ -42,7 +42,6 @@ jobs:
           
           for branch in $REMOTE_BRANCHES; do
             echo "Checking if local branch $branch exists"
-            sleep 5  # 每个分支处理间隔 5 秒
             if echo "$LOCAL_BRANCHES" | grep -E "^$branch$" > /dev/null; then
               echo "Syncing branch: $branch"
               gh repo sync $LOCAL_REPO -b $branch --force
