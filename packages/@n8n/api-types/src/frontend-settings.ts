@@ -1,4 +1,3 @@
-import type { FrontendBetaFeatures } from '@n8n/config';
 import type { ExpressionEvaluatorType, LogLevel, WorkflowSettings } from 'n8n-workflow';
 
 export interface IVersionNotificationSettings {
@@ -156,6 +155,9 @@ export interface FrontendSettings {
 	mfa: {
 		enabled: boolean;
 	};
+	folders: {
+		enabled: boolean;
+	};
 	banners: {
 		dismissed: string[];
 	};
@@ -163,7 +165,11 @@ export interface FrontendSettings {
 		pruneTime: number;
 		licensePruneTime: number;
 	};
-	pruning: {
+	aiCredits: {
+		enabled: boolean;
+		credits: number;
+	};
+	pruning?: {
 		isEnabled: boolean;
 		maxAge: number;
 		maxCount: number;
@@ -171,7 +177,8 @@ export interface FrontendSettings {
 	security: {
 		blockFileAccessToN8nFiles: boolean;
 	};
-	betaFeatures: FrontendBetaFeatures[];
-	virtualSchemaView: boolean;
 	easyAIWorkflowOnboarded: boolean;
+	partialExecution: {
+		version: 1 | 2;
+	};
 }
