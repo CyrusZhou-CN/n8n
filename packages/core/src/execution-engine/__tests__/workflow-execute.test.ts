@@ -856,6 +856,7 @@ describe('WorkflowExecute', () => {
 							},
 							source: [],
 							startTime: 0,
+							executionIndex: 0,
 							executionTime: 0,
 						},
 					],
@@ -1132,6 +1133,7 @@ describe('WorkflowExecute', () => {
 						source: [],
 						data: { main: [[], []] },
 						startTime: 0,
+						executionIndex: 0,
 						executionTime: 0,
 					},
 				],
@@ -1165,6 +1167,7 @@ describe('WorkflowExecute', () => {
 							main: [[{ json: { data: 'test' } }], []],
 						},
 						startTime: 0,
+						executionIndex: 0,
 						executionTime: 0,
 					},
 				],
@@ -1188,6 +1191,7 @@ describe('WorkflowExecute', () => {
 							main: [[]],
 						},
 						startTime: 0,
+						executionIndex: 0,
 						executionTime: 0,
 					},
 					{
@@ -1196,6 +1200,7 @@ describe('WorkflowExecute', () => {
 							main: [[{ json: { data: 'test' } }]],
 						},
 						startTime: 0,
+						executionIndex: 1,
 						executionTime: 0,
 					},
 				],
@@ -1215,6 +1220,7 @@ describe('WorkflowExecute', () => {
 					{
 						source: [],
 						startTime: 0,
+						executionIndex: 0,
 						executionTime: 0,
 					},
 				],
@@ -1254,7 +1260,7 @@ describe('WorkflowExecute', () => {
 
 		test('should do nothing when there is no metadata', () => {
 			runExecutionData.resultData.runData = {
-				node1: [{ startTime: 0, executionTime: 0, source: [] }],
+				node1: [{ startTime: 0, executionTime: 0, source: [], executionIndex: 0 }],
 			};
 
 			workflowExecute.moveNodeMetadata();
@@ -1264,7 +1270,7 @@ describe('WorkflowExecute', () => {
 
 		test('should merge metadata into runData for single node', () => {
 			runExecutionData.resultData.runData = {
-				node1: [{ startTime: 0, executionTime: 0, source: [] }],
+				node1: [{ startTime: 0, executionTime: 0, source: [], executionIndex: 0 }],
 			};
 			runExecutionData.executionData!.metadata = {
 				node1: [{ parentExecution }],
@@ -1277,8 +1283,8 @@ describe('WorkflowExecute', () => {
 
 		test('should merge metadata into runData for multiple nodes', () => {
 			runExecutionData.resultData.runData = {
-				node1: [{ startTime: 0, executionTime: 0, source: [] }],
-				node2: [{ startTime: 0, executionTime: 0, source: [] }],
+				node1: [{ startTime: 0, executionTime: 0, source: [], executionIndex: 0 }],
+				node2: [{ startTime: 0, executionTime: 0, source: [], executionIndex: 1 }],
 			};
 			runExecutionData.executionData!.metadata = {
 				node1: [{ parentExecution }],
@@ -1297,6 +1303,7 @@ describe('WorkflowExecute', () => {
 				node1: [
 					{
 						startTime: 0,
+						executionIndex: 0,
 						executionTime: 0,
 						source: [],
 						metadata: { subExecutionsCount: 4 },
@@ -1318,8 +1325,8 @@ describe('WorkflowExecute', () => {
 		test('should handle multiple run indices', () => {
 			runExecutionData.resultData.runData = {
 				node1: [
-					{ startTime: 0, executionTime: 0, source: [] },
-					{ startTime: 0, executionTime: 0, source: [] },
+					{ startTime: 0, executionTime: 0, source: [], executionIndex: 0 },
+					{ startTime: 0, executionTime: 0, source: [], executionIndex: 1 },
 				],
 			};
 			runExecutionData.executionData!.metadata = {

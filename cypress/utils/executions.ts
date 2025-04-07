@@ -77,6 +77,7 @@ export function runMockWorkflowExecution({
 		cy.push('nodeExecuteBefore', {
 			executionId,
 			nodeName,
+			data: nodeRunData,
 		});
 		cy.push('nodeExecuteAfter', {
 			executionId,
