@@ -251,7 +251,7 @@ describe('Execution Lifecycle Hooks', () => {
 				await lifecycleHooks.runHook('nodeExecuteBefore', [nodeName, taskStartedData]);
 
 				expect(push.send).toHaveBeenCalledWith(
-					{ type: 'nodeExecuteBefore', data: { executionId, nodeName } },
+					{ type: 'nodeExecuteBefore', data: { executionId, nodeName, data: taskStartedData } },
 					pushRef,
 				);
 			});

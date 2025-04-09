@@ -16,7 +16,8 @@ export function createMockNodeExecutionData(
 ): Record<string, ITaskData> {
 	return {
 		[name]: {
-			startTime: new Date().getTime(),
+			startTime: Date.now(),
+			executionIndex: 0,
 			executionTime: 1,
 			executionStatus,
 			data: jsonData
