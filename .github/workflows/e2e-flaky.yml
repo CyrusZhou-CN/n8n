@@ -1,21 +1,10 @@
-name: Check Flaky E2E Test
+name: Debug Flaky E2E Test (Temporary Push Trigger)
 
+# Trigger automatically ONLY on pushes to your specific development branch
 on:
-  workflow_dispatch:
-    inputs:
-      test_name:
-        description: 'The name of the test to filter.'
-        required: true
-        type: string
-      burn_count:
-        description: 'Number of times to run the test.'
-        required: false
-        type: number
-        default: 50
-      branch:
-        description: 'Optional: GitHub branch, tag, or SHA to test. Defaults to the branch selected in UI.'
-        required: false
-        type: string
+  push:
+    branches:
+      - CAT-754-flaky-test-workflow
 
 jobs:
   debug-test:
@@ -23,10 +12,9 @@ jobs:
     timeout-minutes: 60
 
     steps:
+      # Checkout the code from the commit that triggered the push
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.inputs.branch }}
 
       - name: Setup PNPM
         uses: pnpm/action-setup@v4
@@ -60,10 +48,8 @@ jobs:
         working-directory: cypress
         run: pnpm cypress:install
 
-      - name: Run Flaky Debug Command
-        run: pnpm run debug:flaky:e2e "${{ github.event.inputs.test_name }}" ${{ github.event.inputs.burn_count }}
+      - name: Run Flaky Debug Command via ENV
         env:
-          NODE_OPTIONS: --dns-result-order=ipv4first
-          E2E_TESTS: true
-          SHELL: /bin/sh
-          CYPRESS_NODE_VIEW_VERSION: 2
+          E2E_DEBUG_FILTER: "maps paired input and output items based on selected input node"
+          E2E_DEBUG_COUNT: 50
+        run: pnpm run debug:flaky:e2e $E2E_DEBUG_FILTER $E2E_DEBUG_COUNT
