@@ -5,6 +5,7 @@ import { readFile, stat } from 'node:fs/promises';
 import prettyBytes from 'pretty-bytes';
 import type { Readable } from 'stream';
 
+import { BinaryDataConfig } from './binary-data.config';
 import type { BinaryData } from './types';
 import { areConfigModes, binaryToBuffer } from './utils';
 import { InvalidManagerError } from '../errors/invalid-manager.error';
@@ -16,7 +17,10 @@ export class BinaryDataService {
 
 	private managers: Record<string, BinaryData.Manager> = {};
 
-	async init(config: BinaryData.Config) {
+	constructor(private readonly config: BinaryDataConfig) {}
+
+	async init() {
+		const { config } = this;
 		if (!areConfigModes(config.availableModes)) throw new InvalidModeError();
 
 		this.mode = config.mode === 'filesystem' ? 'filesystem-v2' : config.mode;

@@ -104,8 +104,8 @@ export const Env =
 			globalMetadata.get(ConfigClass) ?? new Map<PropertyKey, PropertyMetadata>();
 
 		const type = Reflect.getMetadata('design:type', target, key) as PropertyType;
-		const isEnum = schema instanceof z.ZodEnum;
-		if (type === Object && !isEnum) {
+		const isZodSchema = schema instanceof z.ZodType;
+		if (type === Object && !isZodSchema) {
 			// eslint-disable-next-line n8n-local-rules/no-plain-errors
 			throw new Error(
 				`Invalid decorator metadata on key "${key as string}" on ${ConfigClass.name}\n Please use explicit typing on all config fields`,

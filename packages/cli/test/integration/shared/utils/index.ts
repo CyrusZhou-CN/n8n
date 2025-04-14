@@ -1,6 +1,7 @@
 import { Container } from '@n8n/di';
 import { mock } from 'jest-mock-extended';
 import {
+	type BinaryDataConfig,
 	BinaryDataService,
 	InstanceSettings,
 	UnrecognizedNodeTypeError,
@@ -110,12 +111,13 @@ export async function initNodeTypes(customNodes?: INodeTypeData) {
  * Initialize a BinaryDataService for test runs.
  */
 export async function initBinaryDataService(mode: 'default' | 'filesystem' = 'default') {
-	const binaryDataService = new BinaryDataService();
-	await binaryDataService.init({
+	const config = mock<BinaryDataConfig>({
 		mode,
 		availableModes: [mode],
 		localStoragePath: '',
 	});
+	const binaryDataService = new BinaryDataService(config);
+	await binaryDataService.init();
 	Container.set(BinaryDataService, binaryDataService);
 }
 
