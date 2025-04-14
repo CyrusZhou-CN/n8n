@@ -27,8 +27,10 @@ const readEnv = (envName: string) => {
 };
 
 export const Config: ClassDecorator = (ConfigClass: Class) => {
-	const factory = function () {
-		const config = new (ConfigClass as new () => Record<PropertyKey, unknown>)();
+	const factory = function (...args: unknown[]) {
+		const config = new (ConfigClass as new (...a: unknown[]) => Record<PropertyKey, unknown>)(
+			...args,
+		);
 		const classMetadata = globalMetadata.get(ConfigClass);
 		if (!classMetadata) {
 			// eslint-disable-next-line n8n-local-rules/no-plain-errors
