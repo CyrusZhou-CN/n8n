@@ -89,6 +89,8 @@ export class FrontendService {
 			endpointForm: this.globalConfig.endpoints.form,
 			endpointFormTest: this.globalConfig.endpoints.formTest,
 			endpointFormWaiting: this.globalConfig.endpoints.formWaiting,
+			endpointMcp: this.globalConfig.endpoints.mcp,
+			endpointMcpTest: this.globalConfig.endpoints.mcpTest,
 			endpointWebhook: this.globalConfig.endpoints.webhook,
 			endpointWebhookTest: this.globalConfig.endpoints.webhookTest,
 			endpointWebhookWaiting: this.globalConfig.endpoints.webhookWaiting,
@@ -364,7 +366,7 @@ export class FrontendService {
 		}
 
 		Object.assign(this.settings.insights, {
-			enabled: this.modulesConfig.modules.includes('insights'),
+			enabled: this.modulesConfig.loadedModules.has('insights'),
 			summary: this.license.isInsightsSummaryEnabled(),
 			dashboard: this.license.isInsightsDashboardEnabled(),
 		});
