@@ -27,6 +27,12 @@ describe('GlobalConfig', () => {
 		port: 5678,
 		listen_address: '0.0.0.0',
 		protocol: 'http',
+		auth: {
+			cookie: {
+				samesite: 'lax',
+				secure: true,
+			},
+		},
 		database: {
 			logging: {
 				enabled: false,
@@ -118,7 +124,6 @@ describe('GlobalConfig', () => {
 				enabled: true,
 				registry: 'https://registry.npmjs.org',
 				reinstallMissing: false,
-				allowToolUsage: false,
 			},
 			errorTriggerType: 'n8n-nodes-base.errorTrigger',
 			include: [],
@@ -173,6 +178,7 @@ describe('GlobalConfig', () => {
 				includeApiStatusCodeLabel: false,
 				includeQueueMetrics: false,
 				queueMetricsInterval: 20,
+				activeWorkflowCountInterval: 60,
 			},
 			additionalNonUIRoutes: '',
 			disableProductionWebhooksOnMainProcess: false,
@@ -180,6 +186,8 @@ describe('GlobalConfig', () => {
 			form: 'form',
 			formTest: 'form-test',
 			formWaiting: 'form-waiting',
+			mcp: 'mcp',
+			mcpTest: 'mcp-test',
 			payloadSizeMax: 16,
 			formDataFileSizeMax: 200,
 			rest: 'rest',
@@ -242,7 +250,6 @@ describe('GlobalConfig', () => {
 		sentry: {
 			backendDsn: '',
 			frontendDsn: '',
-			n8nVersion: '',
 			environment: '',
 			deploymentName: '',
 		},
@@ -269,7 +276,7 @@ describe('GlobalConfig', () => {
 		license: {
 			serverUrl: 'https://license.n8n.io/v1',
 			autoRenewalEnabled: true,
-			autoRenewOffset: 60 * 60 * 72,
+			detachFloatingOnShutdown: true,
 			activationKey: '',
 			tenantId: 1,
 			cert: '',
@@ -278,6 +285,7 @@ describe('GlobalConfig', () => {
 			restrictFileAccessTo: '',
 			blockFileAccessToN8nFiles: true,
 			daysAbandonedWorkflow: 90,
+			contentSecurityPolicy: '{}',
 		},
 		executions: {
 			pruneData: true,
@@ -325,7 +333,6 @@ describe('GlobalConfig', () => {
 			DB_LOGGING_MAX_EXECUTION_TIME: '0',
 			N8N_METRICS: 'TRUE',
 			N8N_TEMPLATES_ENABLED: '0',
-			N8N_RELEASE_DATE: '2025-02-17T13:54:15Z',
 		};
 		const config = Container.get(GlobalConfig);
 		expect(structuredClone(config)).toEqual({
@@ -356,10 +363,6 @@ describe('GlobalConfig', () => {
 			templates: {
 				...defaultConfig.templates,
 				enabled: false,
-			},
-			generic: {
-				...defaultConfig.generic,
-				releaseDate: new Date('2025-02-17T13:54:15.000Z'),
 			},
 		});
 		expect(mockFs.readFileSync).not.toHaveBeenCalled();
@@ -397,14 +400,24 @@ describe('GlobalConfig', () => {
 		);
 	});
 
-	it('should handle invalid timestamps', () => {
-		process.env = {
-			N8N_RELEASE_DATE: 'abcd',
-		};
-		const config = Container.get(GlobalConfig);
-		expect(config.generic.releaseDate).toBeUndefined();
-		expect(consoleWarnMock).toHaveBeenCalledWith(
-			'Invalid timestamp value for N8N_RELEASE_DATE: abcd',
-		);
+	describe('string unions', () => {
+		it('on invalid value, should warn and fall back to default value', () => {
+			process.env = {
+				N8N_RUNNERS_MODE: 'non-existing-mode',
+				N8N_RUNNERS_ENABLED: 'true',
+				DB_TYPE: 'postgresdb',
+			};
+
+			const globalConfig = Container.get(GlobalConfig);
+			expect(globalConfig.taskRunners.mode).toEqual('internal');
+			expect(consoleWarnMock).toHaveBeenCalledWith(
+				expect.stringContaining(
+					"Invalid value for N8N_RUNNERS_MODE - Invalid enum value. Expected 'internal' | 'external', received 'non-existing-mode'. Falling back to default value.",
+				),
+			);
+
+			expect(globalConfig.taskRunners.enabled).toEqual(true);
+			expect(globalConfig.database.type).toEqual('postgresdb');
+		});
 	});
 });
