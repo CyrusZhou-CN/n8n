@@ -16,6 +16,7 @@ import type { BaseTextKey } from '@/plugins/i18n';
 import type { Scope } from '@n8n/permissions';
 import type { BaseFolderItem, BaseResource, ITag, ResourceParentFolder } from '@/Interface';
 import { isSharedResource, isResourceSortableByDate } from '@/utils/typeGuards';
+import { useN8nLocalStorage } from '@/composables/useN8nLocalStorage';
 
 type ResourceKeyType = 'credentials' | 'workflows' | 'variables' | 'folders';
 
@@ -69,6 +70,7 @@ const i18n = useI18n();
 const { callDebounced } = useDebounce();
 const usersStore = useUsersStore();
 const telemetry = useTelemetry();
+const n8nLocalStorage = useN8nLocalStorage();
 
 const props = withDefaults(
 	defineProps<{
@@ -291,6 +293,13 @@ watch(
 	(newValue) => {
 		emit('sort', newValue);
 		sendSortingTelemetry();
+		n8nLocalStorage.saveProjectPreferencesToLocalStorage(
+			(route.params.projectId as string) ?? '',
+			'workflows',
+			{
+				sort: newValue,
+			},
+		);
 	},
 );
 
@@ -351,6 +360,16 @@ const hasAppliedFilters = (): boolean => {
 const setRowsPerPage = async (numberOfRowsPerPage: number) => {
 	rowsPerPage.value = numberOfRowsPerPage;
 	await savePaginationToQueryString();
+
+	// Also save the page size to local storage
+	n8nLocalStorage.saveProjectPreferencesToLocalStorage(
+		(route.params.projectId as string) ?? '',
+		'workflows',
+		{
+			pageSize: numberOfRowsPerPage,
+		},
+	);
+
 	emit('update:page-size', numberOfRowsPerPage);
 };
 
