@@ -546,11 +546,6 @@ const fetchWorkflows = async () => {
 const onSortUpdated = async (sort: string) => {
 	currentSort.value =
 		WORKFLOWS_SORT_MAP[sort as keyof typeof WORKFLOWS_SORT_MAP] ?? 'updatedAt:desc';
-	if (currentSort.value !== 'updatedAt:desc') {
-		void router.replace({ query: { ...route.query, sort } });
-	} else {
-		void router.replace({ query: { ...route.query, sort: undefined } });
-	}
 	await fetchWorkflows();
 };
 

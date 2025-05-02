@@ -290,9 +290,10 @@ watch(
 
 watch(
 	() => sortBy.value,
-	(newValue) => {
+	async (newValue) => {
 		emit('sort', newValue);
 		sendSortingTelemetry();
+		await savePaginationToQueryString();
 		n8nLocalStorage.saveProjectPreferencesToLocalStorage(
 			(route.params.projectId as string) ?? '',
 			'workflows',
@@ -489,6 +490,12 @@ const savePaginationToQueryString = async () => {
 		currentQuery.pageSize = rowsPerPage.value.toString();
 	} else {
 		delete currentQuery.pageSize;
+	}
+
+	if (sortBy.value !== props.sortOptions[0]) {
+		currentQuery.sort = sortBy.value;
+	} else {
+		delete currentQuery.sort;
 	}
 
 	await router.replace({
