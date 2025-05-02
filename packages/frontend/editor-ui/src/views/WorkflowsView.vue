@@ -557,7 +557,9 @@ const onSortUpdated = async (sort: string) => {
 const onFiltersUpdated = async () => {
 	currentPage.value = 1;
 	saveFiltersOnQueryString();
-	await callDebounced(fetchWorkflows, { debounceTime: FILTERS_DEBOUNCE_TIME, trailing: true });
+	if (hasFilters.value) {
+		await callDebounced(fetchWorkflows, { debounceTime: FILTERS_DEBOUNCE_TIME, trailing: true });
+	}
 };
 
 const onSearchUpdated = async (search: string) => {
@@ -572,13 +574,17 @@ const onSearchUpdated = async (search: string) => {
 };
 
 const setCurrentPage = async (page: number) => {
-	currentPage.value = page;
-	await callDebounced(fetchWorkflows, { debounceTime: FILTERS_DEBOUNCE_TIME, trailing: true });
+	if (page !== currentPage.value) {
+		currentPage.value = page;
+		await callDebounced(fetchWorkflows, { debounceTime: FILTERS_DEBOUNCE_TIME, trailing: true });
+	}
 };
 
 const setPageSize = async (size: number) => {
-	pageSize.value = size;
-	await callDebounced(fetchWorkflows, { debounceTime: FILTERS_DEBOUNCE_TIME, trailing: true });
+	if (size !== pageSize.value) {
+		pageSize.value = size;
+		await callDebounced(fetchWorkflows, { debounceTime: FILTERS_DEBOUNCE_TIME, trailing: true });
+	}
 };
 
 const onClickTag = async (tagId: string) => {
