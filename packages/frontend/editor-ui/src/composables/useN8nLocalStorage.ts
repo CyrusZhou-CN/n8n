@@ -52,16 +52,20 @@ export function useN8nLocalStorage() {
 		};
 	};
 
-	const loadProjectPreferencesFromLocalStorage = (projectId: string) => {
+	const loadProjectPreferencesFromLocalStorage = (
+		projectId: string,
+		tabKey: 'workflows' | 'credentials',
+	) => {
 		const projectKey = getProjectKey(projectId);
 		if (!projectKey) {
-			return;
+			return {};
 		}
 		const localStorage = useLocalStorage<Record<string, WorkflowListPreferences>>(
 			LOCAL_STORAGE_WORKFLOW_LIST_PREFERENCES_KEY,
 			{},
 		);
-		const projectPreferences = localStorage.value[projectKey];
+		const projectPreferences: TabSettings =
+			(localStorage.value[projectKey]?.[tabKey] as TabSettings) || {};
 		return projectPreferences;
 	};
 
