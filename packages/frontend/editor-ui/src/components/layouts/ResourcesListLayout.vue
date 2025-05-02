@@ -293,14 +293,7 @@ watch(
 	async (newValue) => {
 		emit('sort', newValue);
 		sendSortingTelemetry();
-		await savePaginationToQueryString();
-		n8nLocalStorage.saveProjectPreferencesToLocalStorage(
-			(route.params.projectId as string) ?? '',
-			'workflows',
-			{
-				sort: newValue,
-			},
-		);
+		await savePaginationPreferences();
 	},
 );
 
@@ -308,12 +301,13 @@ watch(
 	() => route?.params?.projectId,
 	async () => {
 		await resetFilters();
+		await loadPaginationPreferences();
 	},
 );
 
 // Lifecycle hooks
 onMounted(async () => {
-	await loadPaginationFromQueryString();
+	await loadPaginationPreferences();
 	await props.initialize();
 	await nextTick();
 
@@ -358,25 +352,19 @@ const hasAppliedFilters = (): boolean => {
 	});
 };
 
-const setRowsPerPage = async (numberOfRowsPerPage: number) => {
+const setRowsPerPage = async (numberOfRowsPerPage: number, updateUrl = true) => {
 	rowsPerPage.value = numberOfRowsPerPage;
-	await savePaginationToQueryString();
-
-	// Also save the page size to local storage
-	n8nLocalStorage.saveProjectPreferencesToLocalStorage(
-		(route.params.projectId as string) ?? '',
-		'workflows',
-		{
-			pageSize: numberOfRowsPerPage,
-		},
-	);
-
+	if (updateUrl) {
+		await savePaginationPreferences();
+	}
 	emit('update:page-size', numberOfRowsPerPage);
 };
 
 const setCurrentPage = async (page: number) => {
 	currentPage.value = page;
-	await savePaginationToQueryString();
+	if (page > 1) {
+		await savePaginationPreferences();
+	}
 	emit('update:current-page', page);
 };
 
@@ -472,7 +460,10 @@ const findNearestPageSize = (size: number): number => {
 	);
 };
 
-const savePaginationToQueryString = async () => {
+/**
+ * Saves the current pagination preferences to local storage and updates the URL query parameters.
+ */
+const savePaginationPreferences = async () => {
 	// For now, only available for paginated lists
 	if (props.type !== 'list-paginated') {
 		return;
@@ -498,30 +489,56 @@ const savePaginationToQueryString = async () => {
 		delete currentQuery.sort;
 	}
 
+	n8nLocalStorage.saveProjectPreferencesToLocalStorage(
+		(route.params.projectId as string) ?? '',
+		'workflows',
+		{
+			sort: sortBy.value,
+			pageSize: rowsPerPage.value,
+		},
+	);
+
 	await router.replace({
 		query: Object.keys(currentQuery).length ? currentQuery : undefined,
 	});
 };
 
-const loadPaginationFromQueryString = async () => {
+/**
+ * Loads the pagination preferences from local storage or URL query parameter
+ * Current page is only saved in the URL query parameters
+ * Page size and sort are saved both in local storage and URL query parameters, with query parameters taking precedence
+ */
+const loadPaginationPreferences = async () => {
 	// For now, only available for paginated lists
 	if (props.type !== 'list-paginated') {
 		return;
 	}
 	const query = router.currentRoute.value.query;
+	// For now, only load workflow list preferences from local storage
+	const localStorageValues = n8nLocalStorage.loadProjectPreferencesFromLocalStorage(
+		(route.params.projectId as string) ?? '',
+		'workflows',
+	);
 
 	if (query.page) {
 		await setCurrentPage(parseInt(query.page as string, 10));
 	}
 
-	if (query.pageSize) {
-		const parsedSize = parseInt(query.pageSize as string, 10);
+	if (query.pageSize ?? localStorageValues.pageSize) {
+		const parsedSize = parseInt(
+			(query.pageSize as string) || String(localStorageValues.pageSize),
+			10,
+		);
 		// Round to the nearest available page size, this will prevent users from passing arbitrary values
-		await setRowsPerPage(findNearestPageSize(parsedSize));
+		await setRowsPerPage(findNearestPageSize(parsedSize), false);
 	}
 
 	if (query.sort) {
 		sortBy.value = query.sort as string;
+	} else if (localStorageValues.sort) {
+		sortBy.value = localStorageValues.sort;
+	} else {
+		sortBy.value = props.sortOptions[0];
 	}
 };
 </script>
