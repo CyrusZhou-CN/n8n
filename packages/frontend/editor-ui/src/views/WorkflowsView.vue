@@ -467,8 +467,6 @@ const initialize = async () => {
  * - Path to the current folder (if not cached)
  */
 const fetchWorkflows = async () => {
-	console.log('==> FETCHING WORKFLOWS');
-
 	// We debounce here so that fast enough fetches don't trigger
 	// the placeholder graphics for a few milliseconds, which would cause a flicker
 	const delayedLoading = debounce(() => {
