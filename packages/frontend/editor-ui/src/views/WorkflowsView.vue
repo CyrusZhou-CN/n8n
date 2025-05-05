@@ -363,7 +363,7 @@ const showRegisteredCommunityCTA = computed(
 watch(
 	() => route.params?.projectId,
 	async () => {
-		await initialize();
+		loading.value = true;
 	},
 );
 

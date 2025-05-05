@@ -286,18 +286,12 @@ watch(
 	},
 );
 
-// watch(
-// 	() => sortBy.value,
-// 	async (newValue) => {
-// 		await setSorting(newValue);
-// 	},
-// );
-
 watch(
 	() => route?.params?.projectId,
 	async () => {
 		await resetFilters();
 		await loadPaginationPreferences();
+		await props.initialize();
 	},
 );
 
