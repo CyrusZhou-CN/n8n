@@ -286,12 +286,12 @@ watch(
 	},
 );
 
-watch(
-	() => sortBy.value,
-	async (newValue) => {
-		await setSorting(newValue);
-	},
-);
+// watch(
+// 	() => sortBy.value,
+// 	async (newValue) => {
+// 		await setSorting(newValue);
+// 	},
+// );
 
 watch(
 	() => route?.params?.projectId,
@@ -351,6 +351,7 @@ const hasAppliedFilters = (): boolean => {
 const setRowsPerPage = async (numberOfRowsPerPage: number, updateUrl = true) => {
 	rowsPerPage.value = numberOfRowsPerPage;
 	if (updateUrl) {
+		console.log('SET ROWS PER PAGE', numberOfRowsPerPage);
 		await savePaginationPreferences();
 	}
 	emit('update:pagination-and-sort', {
@@ -361,6 +362,7 @@ const setRowsPerPage = async (numberOfRowsPerPage: number, updateUrl = true) => 
 const setSorting = async (sort: string, updateUrl = true) => {
 	sortBy.value = sort;
 	if (updateUrl) {
+		console.log('SET SORTING', sort);
 		await savePaginationPreferences();
 	}
 	emit('update:pagination-and-sort', {
@@ -368,14 +370,16 @@ const setSorting = async (sort: string, updateUrl = true) => {
 	});
 };
 
-const setCurrentPage = async (page: number) => {
-	if (page !== currentPage.value) {
-		currentPage.value = page;
+const setCurrentPage = async (page: number, updateUrl = true) => {
+	currentPage.value = page;
+	console.log('SET CURRENT PAGE', page);
+
+	if (updateUrl) {
 		await savePaginationPreferences();
-		emit('update:pagination-and-sort', {
-			page,
-		});
 	}
+	emit('update:pagination-and-sort', {
+		page,
+	});
 };
 
 defineExpose({
@@ -427,7 +431,7 @@ const resetFilters = async () => {
 	});
 
 	// Reset the current page
-	await setCurrentPage(1);
+	await setCurrentPage(1, false);
 
 	resettingFilters.value = true;
 	hasFilters.value = false;
@@ -544,6 +548,8 @@ const loadPaginationPreferences = async () => {
 	}
 
 	if (query.pageSize ?? localStorageValues.pageSize) {
+		console.log('HAS SAVE PAGE SIZE', query.pageSize, localStorageValues.pageSize);
+
 		const parsedSize = parseInt(
 			(query.pageSize as string) || String(localStorageValues.pageSize),
 			10,
@@ -552,6 +558,11 @@ const loadPaginationPreferences = async () => {
 		const newPageSize = findNearestPageSize(parsedSize);
 		rowsPerPage.value = newPageSize;
 		emitPayload.rowsPerPage = newPageSize;
+	} else {
+		console.log('NO PAGE SIZE');
+
+		rowsPerPage.value = props.customPageSize;
+		emitPayload.rowsPerPage = props.customPageSize;
 	}
 
 	if (query.sort) {
@@ -623,7 +634,12 @@ const loadPaginationPreferences = async () => {
 								</template>
 							</n8n-input>
 							<div :class="$style['sort-and-filter']">
-								<n8n-select v-model="sortBy" size="small" data-test-id="resources-list-sort">
+								<n8n-select
+									v-model="sortBy"
+									size="small"
+									data-test-id="resources-list-sort"
+									@change="setSorting(sortBy, false)"
+								>
 									<n8n-option
 										v-for="sortOption in sortOptions"
 										:key="sortOption"

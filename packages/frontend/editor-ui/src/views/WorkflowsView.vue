@@ -112,7 +112,7 @@ const documentTitle = useDocumentTitle();
 const { callDebounced } = useDebounce();
 const overview = useOverview();
 
-const loading = ref(false);
+const loading = ref(true);
 const breadcrumbsLoading = ref(false);
 const filters = ref<Filters>({
 	search: '',
@@ -467,6 +467,8 @@ const initialize = async () => {
  * - Path to the current folder (if not cached)
  */
 const fetchWorkflows = async () => {
+	console.log('==> FETCHING WORKFLOWS');
+
 	// We debounce here so that fast enough fetches don't trigger
 	// the placeholder graphics for a few milliseconds, which would cause a flicker
 	const delayedLoading = debounce(() => {
