@@ -128,6 +128,9 @@ const rowsPerPage = ref<number>(props.customPageSize);
 const resettingFilters = ref(false);
 const search = ref<HTMLElement | null>(null);
 
+const preferredPageSize = ref<number>(props.customPageSize);
+const preferredSort = ref<string>(props.sortOptions[0]);
+
 const emit = defineEmits<{
 	'update:filters': [value: BaseFilters];
 	'click:add': [event: Event];
@@ -345,7 +348,6 @@ const hasAppliedFilters = (): boolean => {
 const setRowsPerPage = async (numberOfRowsPerPage: number, updateUrl = true) => {
 	rowsPerPage.value = numberOfRowsPerPage;
 	if (updateUrl) {
-		console.log('SET ROWS PER PAGE', numberOfRowsPerPage);
 		await savePaginationPreferences();
 	}
 	emit('update:pagination-and-sort', {
@@ -356,7 +358,6 @@ const setRowsPerPage = async (numberOfRowsPerPage: number, updateUrl = true) => 
 const setSorting = async (sort: string, updateUrl = true) => {
 	sortBy.value = sort;
 	if (updateUrl) {
-		console.log('SET SORTING', sort);
 		await savePaginationPreferences();
 	}
 	emit('update:pagination-and-sort', {
@@ -366,8 +367,6 @@ const setSorting = async (sort: string, updateUrl = true) => {
 
 const setCurrentPage = async (page: number, updateUrl = true) => {
 	currentPage.value = page;
-	console.log('SET CURRENT PAGE', page);
-
 	if (updateUrl) {
 		await savePaginationPreferences();
 	}
@@ -485,13 +484,13 @@ const savePaginationPreferences = async (updateURL = true) => {
 		delete currentQuery.page;
 	}
 
-	if (rowsPerPage.value !== props.customPageSize) {
+	if (rowsPerPage.value !== preferredPageSize.value) {
 		currentQuery.pageSize = rowsPerPage.value.toString();
 	} else {
 		delete currentQuery.pageSize;
 	}
 
-	if (sortBy.value !== props.sortOptions[0]) {
+	if (sortBy.value !== preferredSort.value) {
 		currentQuery.sort = sortBy.value;
 	} else {
 		delete currentQuery.sort;
@@ -534,7 +533,6 @@ const loadPaginationPreferences = async () => {
 
 	if (query.page) {
 		const newPage = parseInt(query.page as string, 10);
-		// TODO: Check if this is working correctly when switching pages
 		if (newPage > 1) {
 			currentPage.value = newPage;
 			emitPayload.page = newPage;
@@ -542,8 +540,6 @@ const loadPaginationPreferences = async () => {
 	}
 
 	if (query.pageSize ?? localStorageValues.pageSize) {
-		console.log('HAS SAVE PAGE SIZE', query.pageSize, localStorageValues.pageSize);
-
 		const parsedSize = parseInt(
 			(query.pageSize as string) || String(localStorageValues.pageSize),
 			10,
@@ -552,9 +548,8 @@ const loadPaginationPreferences = async () => {
 		const newPageSize = findNearestPageSize(parsedSize);
 		rowsPerPage.value = newPageSize;
 		emitPayload.rowsPerPage = newPageSize;
+		preferredPageSize.value = newPageSize;
 	} else {
-		console.log('NO PAGE SIZE');
-
 		rowsPerPage.value = props.customPageSize;
 		emitPayload.rowsPerPage = props.customPageSize;
 	}
@@ -562,9 +557,11 @@ const loadPaginationPreferences = async () => {
 	if (query.sort) {
 		sortBy.value = query.sort as string;
 		emitPayload.sort = query.sort as string;
+		preferredSort.value = query.sort as string;
 	} else if (localStorageValues.sort) {
 		await setSorting(localStorageValues.sort, false);
 		emitPayload.sort = localStorageValues.sort;
+		preferredSort.value = localStorageValues.sort;
 	} else {
 		sortBy.value = props.sortOptions[0];
 	}
@@ -632,7 +629,7 @@ const loadPaginationPreferences = async () => {
 									v-model="sortBy"
 									size="small"
 									data-test-id="resources-list-sort"
-									@change="setSorting(sortBy, false)"
+									@change="setSorting(sortBy)"
 								>
 									<n8n-option
 										v-for="sortOption in sortOptions"
