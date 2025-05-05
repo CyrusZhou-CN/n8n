@@ -542,13 +542,6 @@ const fetchWorkflows = async () => {
 };
 
 // Filter and sort methods
-
-const onSortUpdated = async (sort: string) => {
-	currentSort.value =
-		WORKFLOWS_SORT_MAP[sort as keyof typeof WORKFLOWS_SORT_MAP] ?? 'updatedAt:desc';
-	await fetchWorkflows();
-};
-
 const onFiltersUpdated = async () => {
 	currentPage.value = 1;
 	saveFiltersOnQueryString();
@@ -568,16 +561,22 @@ const onSearchUpdated = async (search: string) => {
 	}
 };
 
-const setCurrentPage = async (page: number) => {
-	if (page !== currentPage.value) {
-		currentPage.value = page;
-		await callDebounced(fetchWorkflows, { debounceTime: FILTERS_DEBOUNCE_TIME, trailing: true });
+const setPaginationAndSort = async (payload: {
+	page?: number;
+	rowsPerPage?: number;
+	sort?: string;
+}) => {
+	if (payload.page) {
+		currentPage.value = payload.page;
 	}
-};
-
-const setPageSize = async (size: number) => {
-	if (size !== pageSize.value) {
-		pageSize.value = size;
+	if (payload.rowsPerPage) {
+		pageSize.value = payload.rowsPerPage;
+	}
+	if (payload.sort) {
+		currentSort.value =
+			WORKFLOWS_SORT_MAP[payload.sort as keyof typeof WORKFLOWS_SORT_MAP] ?? 'updatedAt:desc';
+	}
+	if (!loading.value) {
 		await callDebounced(fetchWorkflows, { debounceTime: FILTERS_DEBOUNCE_TIME, trailing: true });
 	}
 };
@@ -1341,10 +1340,11 @@ const onNameSubmit = async ({
 		:has-empty-state="foldersStore.totalWorkflowCount === 0 && !currentFolderId"
 		@click:add="addWorkflow"
 		@update:search="onSearchUpdated"
-		@update:current-page="setCurrentPage"
-		@update:page-size="setPageSize"
+		@update:current-page="setPaginationAndSort({ page: $event })"
+		@update:page-size="setPaginationAndSort({ rowsPerPage: $event })"
 		@update:filters="onFiltersUpdated"
-		@sort="onSortUpdated"
+		@sort="setPaginationAndSort({ sort: $event })"
+		@update:pagination-and-sort="setPaginationAndSort"
 		@mouseleave="folderHelpers.resetDropTarget"
 	>
 		<template #header>

@@ -131,9 +131,7 @@ const search = ref<HTMLElement | null>(null);
 const emit = defineEmits<{
 	'update:filters': [value: BaseFilters];
 	'click:add': [event: Event];
-	'update:current-page': [page: number];
-	'update:page-size': [pageSize: number];
-	sort: [value: string];
+	'update:pagination-and-sort': [{ page?: number; pageSize?: number; sort?: string }];
 	'update:search': [value: string];
 }>();
 
@@ -291,9 +289,7 @@ watch(
 watch(
 	() => sortBy.value,
 	async (newValue) => {
-		emit('sort', newValue);
-		sendSortingTelemetry();
-		await savePaginationPreferences();
+		await setSorting(newValue);
 	},
 );
 
@@ -357,15 +353,29 @@ const setRowsPerPage = async (numberOfRowsPerPage: number, updateUrl = true) => 
 	if (updateUrl) {
 		await savePaginationPreferences();
 	}
-	emit('update:page-size', numberOfRowsPerPage);
+	emit('update:pagination-and-sort', {
+		pageSize: numberOfRowsPerPage,
+	});
+};
+
+const setSorting = async (sort: string, updateUrl = true) => {
+	sortBy.value = sort;
+	if (updateUrl) {
+		await savePaginationPreferences();
+	}
+	emit('update:pagination-and-sort', {
+		sort,
+	});
 };
 
 const setCurrentPage = async (page: number) => {
-	currentPage.value = page;
-	if (page > 1) {
+	if (page !== currentPage.value) {
+		currentPage.value = page;
 		await savePaginationPreferences();
+		emit('update:pagination-and-sort', {
+			page,
+		});
 	}
-	emit('update:current-page', page);
 };
 
 defineExpose({
@@ -463,7 +473,7 @@ const findNearestPageSize = (size: number): number => {
 /**
  * Saves the current pagination preferences to local storage and updates the URL query parameters.
  */
-const savePaginationPreferences = async () => {
+const savePaginationPreferences = async (updateURL = true) => {
 	// For now, only available for paginated lists
 	if (props.type !== 'list-paginated') {
 		return;
@@ -498,9 +508,11 @@ const savePaginationPreferences = async () => {
 		},
 	);
 
-	await router.replace({
-		query: Object.keys(currentQuery).length ? currentQuery : undefined,
-	});
+	if (updateURL) {
+		await router.replace({
+			query: Object.keys(currentQuery).length ? currentQuery : undefined,
+		});
+	}
 };
 
 /**
@@ -520,8 +532,15 @@ const loadPaginationPreferences = async () => {
 		'workflows',
 	);
 
+	const emitPayload: { page?: number; rowsPerPage?: number; sort?: string } = {};
+
 	if (query.page) {
-		await setCurrentPage(parseInt(query.page as string, 10));
+		const newPage = parseInt(query.page as string, 10);
+		// TODO: Check if this is working correctly when switching pages
+		if (newPage > 1) {
+			currentPage.value = newPage;
+			emitPayload.page = newPage;
+		}
 	}
 
 	if (query.pageSize ?? localStorageValues.pageSize) {
@@ -530,16 +549,21 @@ const loadPaginationPreferences = async () => {
 			10,
 		);
 		// Round to the nearest available page size, this will prevent users from passing arbitrary values
-		await setRowsPerPage(findNearestPageSize(parsedSize), false);
+		const newPageSize = findNearestPageSize(parsedSize);
+		rowsPerPage.value = newPageSize;
+		emitPayload.rowsPerPage = newPageSize;
 	}
 
 	if (query.sort) {
 		sortBy.value = query.sort as string;
+		emitPayload.sort = query.sort as string;
 	} else if (localStorageValues.sort) {
-		sortBy.value = localStorageValues.sort;
+		await setSorting(localStorageValues.sort, false);
+		emitPayload.sort = localStorageValues.sort;
 	} else {
 		sortBy.value = props.sortOptions[0];
 	}
+	emit('update:pagination-and-sort', emitPayload);
 };
 </script>
 
