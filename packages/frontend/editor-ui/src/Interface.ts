@@ -217,6 +217,12 @@ export interface IStartRunData {
 		name: string;
 		data?: ITaskData;
 	};
+	agentRequest?: {
+		query: NodeParameterValueType;
+		tool: {
+			name: NodeParameterValueType;
+		};
+	};
 }
 
 export interface ITableData {
@@ -1541,6 +1547,7 @@ export type ToggleNodeCreatorOptions = {
 	source?: NodeCreatorOpenSource;
 	nodeCreatorView?: NodeFilterType;
 	hasAddedNodes?: boolean;
+	connectionType?: NodeConnectionType;
 };
 
 export type AppliedThemeOption = 'light' | 'dark';
