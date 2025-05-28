@@ -626,7 +626,6 @@ export const enum WORKFLOW_MENU_ACTIONS {
 	DELETE = 'delete',
 	ARCHIVE = 'archive',
 	UNARCHIVE = 'unarchive',
-	SWITCH_NODE_VIEW_VERSION = 'switch-node-view-version',
 	RENAME = 'rename',
 }
 
@@ -741,7 +740,7 @@ export const EXPERIMENTS_TO_TRACK = [
 	WORKFLOW_BUILDER_EXPERIMENT.name,
 ];
 
-export const WORKFLOW_EVALUATION_EXPERIMENT = '025_workflow_evaluation';
+export const WORKFLOW_EVALUATION_EXPERIMENT = '032_evaluation_mvp';
 
 export const MFA_FORM = {
 	MFA_TOKEN: 'MFA_TOKEN',
