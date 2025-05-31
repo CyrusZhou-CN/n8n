@@ -1,5 +1,5 @@
 name: 'Setup Environment and Build Project'
-description: 'Sets up Node.js with pnpm, installs dependencies, enables Turborepo caching, and builds the project (optional).'
+description: 'Sets up Node.js with pnpm, installs dependencies, (optional) enables Turborepo caching, and (optional) builds the project.'
 
 inputs:
   node-version:
