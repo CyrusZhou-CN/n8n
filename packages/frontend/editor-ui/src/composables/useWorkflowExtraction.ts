@@ -23,7 +23,7 @@ import { PUSH_NODES_OFFSET } from '@/utils/nodeViewUtils';
 import { useUIStore } from '@/stores/ui.store';
 import { useNodeTypesStore } from '@/stores/nodeTypes.store';
 import { useTelemetry } from './useTelemetry';
-import { isEqual } from 'lodash-es';
+import isEqual from 'lodash/isEqual';
 import { v4 as uuidv4 } from 'uuid';
 
 const CANVAS_HISTORY_OPTIONS = {
@@ -37,7 +37,7 @@ export function useWorkflowExtraction() {
 	const toast = useToast();
 	const router = useRouter();
 	const historyStore = useHistoryStore();
-	const canvasOperations = useCanvasOperations({ router });
+	const canvasOperations = useCanvasOperations();
 	const i18n = useI18n();
 	const telemetry = useTelemetry();
 
