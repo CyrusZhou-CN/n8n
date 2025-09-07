@@ -38,6 +38,7 @@ import type {
 import {
 	ApplicationError,
 	createDeferredPromise,
+	createRunExecutionData,
 	NodeApiError,
 	NodeConnectionTypes,
 	NodeHelpers,
@@ -1409,20 +1410,7 @@ describe('WorkflowExecute', () => {
 		let workflowExecute: WorkflowExecute;
 
 		beforeEach(() => {
-			runExecutionData = {
-				startData: {},
-				resultData: {
-					runData: {},
-					pinData: {},
-				},
-				executionData: {
-					contextData: {},
-					nodeExecutionStack: [],
-					metadata: {},
-					waitingExecution: {},
-					waitingExecutionSource: {},
-				},
-			};
+			runExecutionData = createRunExecutionData();
 			workflowExecute = new WorkflowExecute(mock(), 'manual', runExecutionData);
 		});
 
@@ -1615,20 +1603,7 @@ describe('WorkflowExecute', () => {
 		const parentExecution = mock<RelatedExecution>();
 
 		beforeEach(() => {
-			runExecutionData = {
-				startData: {},
-				resultData: {
-					runData: {},
-					pinData: {},
-				},
-				executionData: {
-					contextData: {},
-					nodeExecutionStack: [],
-					metadata: {},
-					waitingExecution: {},
-					waitingExecutionSource: {},
-				},
-			};
+			runExecutionData = createRunExecutionData();
 			workflowExecute = new WorkflowExecute(mock(), 'manual', runExecutionData);
 		});
 
