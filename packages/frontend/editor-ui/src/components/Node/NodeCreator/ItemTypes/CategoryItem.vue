@@ -1,6 +1,7 @@
 <script lang="ts" setup>
 import { computed } from 'vue';
 
+import { N8nIcon } from '@n8n/design-system';
 export interface Props {
 	expanded?: boolean;
 	active?: boolean;
@@ -28,25 +29,25 @@ const categoryName = computed(() => {
 		<div :class="{ [$style.category]: true, [$style.active]: active }">
 			<span :class="$style.name">
 				<span v-text="categoryName" />
-				<font-awesome-icon v-if="isTrigger" icon="bolt" size="xs" :class="$style.triggerIcon" />
+				<N8nIcon v-if="isTrigger" icon="bolt-filled" size="xsmall" :class="$style.triggerIcon" />
 				<slot />
 			</span>
-			<font-awesome-icon v-if="expanded" icon="chevron-down" :class="$style.arrow" />
-			<font-awesome-icon v-else :class="$style.arrow" icon="chevron-up" />
+			<N8nIcon v-if="expanded" icon="chevron-down" color="text-light" size="large" />
+			<N8nIcon v-else icon="chevron-up" color="text-light" size="large" />
 		</div>
 	</div>
 </template>
 
 <style lang="scss" module>
 .triggerIcon {
-	color: var(--color-primary);
-	margin-left: var(--spacing-3xs);
+	color: var(--color--primary);
+	margin-left: var(--spacing--3xs);
 }
 .category {
-	font-size: var(--font-size-s);
-	font-weight: var(--font-weight-bold);
-	line-height: var(--font-line-height-compact);
-	padding: var(--spacing-2xs) var(--spacing-s);
+	font-size: var(--font-size--sm);
+	font-weight: var(--font-weight--bold);
+	line-height: var(--line-height--sm);
+	padding: var(--spacing--2xs) var(--spacing--sm);
 	border-bottom: 1px solid $node-creator-border-color;
 	display: flex;
 	cursor: pointer;
@@ -70,12 +71,6 @@ const categoryName = computed(() => {
 
 .name {
 	flex-grow: 1;
-	color: var(--color-text-dark);
-}
-
-.arrow {
-	font-size: var(--font-size-2xs);
-	width: 12px;
-	color: $node-creator-arrow-color;
+	color: var(--color--text--shade-1);
 }
 </style>

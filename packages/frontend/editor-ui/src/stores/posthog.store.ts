@@ -81,7 +81,11 @@ export const usePostHog = defineStore('posthog', () => {
 	const identify = () => {
 		const instanceId = rootStore.instanceId;
 		const user = usersStore.currentUser;
-		const traits: Record<string, string | number> = { instance_id: instanceId };
+		const versionCli = rootStore.versionCli;
+		const traits: Record<string, string | number> = {
+			instance_id: instanceId,
+			version_cli: versionCli,
+		};
 
 		if (user && typeof user.createdAt === 'string') {
 			traits.created_at_timestamp = new Date(user.createdAt).getTime();
@@ -132,7 +136,7 @@ export const usePostHog = defineStore('posthog', () => {
 		const distinctId = `${instanceId}#${userId}`;
 
 		const options: Parameters<typeof window.posthog.init>[1] = {
-			api_host: config.apiHost,
+			api_host: settingsStore.settings.posthog.proxy,
 			autocapture: config.autocapture,
 			disable_session_recording: config.disableSessionRecording,
 			debug: config.debug,
@@ -164,12 +168,6 @@ export const usePostHog = defineStore('posthog', () => {
 		}
 	};
 
-	const capture = (event: string, properties: IDataObject) => {
-		if (typeof window.posthog?.capture === 'function') {
-			window.posthog.capture(event, properties);
-		}
-	};
-
 	const setMetadata = (metadata: IDataObject, target: 'user' | 'events') => {
 		if (typeof window.posthog?.people?.set !== 'function') return;
 		if (typeof window.posthog?.register !== 'function') return;
@@ -181,6 +179,12 @@ export const usePostHog = defineStore('posthog', () => {
 		}
 	};
 
+	const capture = (event: string, properties: IDataObject) => {
+		if (typeof window.posthog?.capture === 'function') {
+			window.posthog.capture(event, properties);
+		}
+	};
+
 	return {
 		init,
 		isFeatureEnabled,
@@ -188,8 +192,8 @@ export const usePostHog = defineStore('posthog', () => {
 		getVariant,
 		reset,
 		identify,
-		capture,
 		setMetadata,
+		capture,
 		overrides,
 	};
 });

@@ -1,9 +1,8 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { generateCodeForAiTransform, reducePayloadSizeOrThrow } from './utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { generateCodeForPrompt } from '@/api/ai';
-import type { AskAiRequest } from '@/types/assistant.types';
+import type { AskAiRequest } from '@/features/assistant/assistant.types';
 import type { Schema } from '@/Interface';
 
 vi.mock('./utils', async () => {

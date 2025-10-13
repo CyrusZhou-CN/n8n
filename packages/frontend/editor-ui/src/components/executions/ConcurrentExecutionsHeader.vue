@@ -1,9 +1,8 @@
 <script lang="ts" setup>
 import { computed } from 'vue';
 import { useI18n } from '@n8n/i18n';
-import { WORKFLOW_EVALUATION_EXPERIMENT } from '@/constants';
-import { usePostHog } from '@/stores/posthog.store';
 
+import { N8nIcon, N8nLink, N8nText, N8nTooltip } from '@n8n/design-system';
 const props = defineProps<{
 	runningExecutionsCount: number;
 	concurrencyCap: number;
@@ -16,8 +15,6 @@ const emit = defineEmits<{
 
 const i18n = useI18n();
 
-const posthogStore = usePostHog();
-
 const tooltipText = computed(() => {
 	let text = i18n.baseText('executionsList.activeExecutions.tooltip', {
 		interpolate: {
@@ -26,9 +23,7 @@ const tooltipText = computed(() => {
 		},
 	});
 
-	if (posthogStore.isFeatureEnabled(WORKFLOW_EVALUATION_EXPERIMENT)) {
-		text += '\n' + i18n.baseText('executionsList.activeExecutions.evaluationNote');
-	}
+	text += '\n' + i18n.baseText('executionsList.activeExecutions.evaluationNote');
 
 	return text;
 });
@@ -48,8 +43,8 @@ const headerText = computed(() => {
 
 <template>
 	<div data-test-id="concurrent-executions-header">
-		<n8n-text>{{ headerText }}</n8n-text>
-		<n8n-tooltip>
+		<N8nText>{{ headerText }}</N8nText>
+		<N8nTooltip>
 			<template #content>
 				<div :class="$style.tooltip">
 					{{ tooltipText }}
@@ -71,8 +66,8 @@ const headerText = computed(() => {
 					>
 				</div>
 			</template>
-			<font-awesome-icon icon="info-circle" class="ml-2xs" />
-		</n8n-tooltip>
+			<N8nIcon icon="info" class="ml-2xs" />
+		</N8nTooltip>
 	</div>
 </template>
 
@@ -82,6 +77,6 @@ const headerText = computed(() => {
 	flex-direction: column;
 }
 .link {
-	margin-top: var(--spacing-xs);
+	margin-top: var(--spacing--xs);
 }
 </style>

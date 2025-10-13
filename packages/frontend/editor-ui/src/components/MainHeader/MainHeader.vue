@@ -9,14 +9,12 @@ import {
 	PLACEHOLDER_EMPTY_WORKFLOW_ID,
 	STICKY_NODE_TYPE,
 	VIEWS,
-	WORKFLOW_EVALUATION_EXPERIMENT,
 	N8N_MAIN_GITHUB_REPO_URL,
 } from '@/constants';
 import { useExecutionsStore } from '@/stores/executions.store';
 import { useNDVStore } from '@/stores/ndv.store';
-import { usePostHog } from '@/stores/posthog.store';
 import { useSettingsStore } from '@/stores/settings.store';
-import { useSourceControlStore } from '@/stores/sourceControl.store';
+import { useSourceControlStore } from '@/features/sourceControl.ee/sourceControl.store';
 import { useUIStore } from '@/stores/ui.store';
 import { useWorkflowsStore } from '@/stores/workflows.store';
 import { computed, onBeforeMount, onBeforeUnmount, onMounted, ref, watch } from 'vue';
@@ -25,8 +23,9 @@ import { useRoute, useRouter } from 'vue-router';
 
 import { useLocalStorage } from '@vueuse/core';
 import GithubButton from 'vue-github-button';
-import type { FolderShortInfo } from '@/Interface';
+import type { FolderShortInfo } from '@/features/folders/folders.types';
 
+import { N8nIcon } from '@n8n/design-system';
 const router = useRouter();
 const route = useRoute();
 const locale = useI18n();
@@ -37,7 +36,6 @@ const sourceControlStore = useSourceControlStore();
 const workflowsStore = useWorkflowsStore();
 const executionsStore = useExecutionsStore();
 const settingsStore = useSettingsStore();
-const posthogStore = usePostHog();
 
 const activeHeaderTab = ref(MAIN_HEADER_TABS.WORKFLOW);
 const workflowToReturnTo = ref('');
@@ -59,18 +57,11 @@ const executionRoutes: VIEWS[] = [
 	VIEWS.EXECUTION_PREVIEW,
 ];
 const tabBarItems = computed(() => {
-	const items = [
+	return [
 		{ value: MAIN_HEADER_TABS.WORKFLOW, label: locale.baseText('generic.editor') },
 		{ value: MAIN_HEADER_TABS.EXECUTIONS, label: locale.baseText('generic.executions') },
+		{ value: MAIN_HEADER_TABS.EVALUATION, label: locale.baseText('generic.tests') },
 	];
-
-	if (posthogStore.isFeatureEnabled(WORKFLOW_EVALUATION_EXPERIMENT)) {
-		items.push({
-			value: MAIN_HEADER_TABS.EVALUATION,
-			label: locale.baseText('generic.tests'),
-		});
-	}
-	return items;
 });
 
 const activeNode = computed(() => ndvStore.activeNode);
@@ -286,7 +277,7 @@ function hideGithubButton() {
 						</GithubButton>
 						<N8nIcon
 							:class="$style['close-github-button']"
-							icon="times-circle"
+							icon="circle-x"
 							size="medium"
 							@click="hideGithubButton"
 						/>
@@ -313,10 +304,10 @@ function hideGithubButton() {
 
 .main-header {
 	min-height: var(--navbar--height);
-	background-color: var(--color-background-xlight);
+	background-color: var(--color--background--light-3);
 	width: 100%;
 	box-sizing: border-box;
-	border-bottom: var(--border-width-base) var(--border-style-base) var(--color-foreground-base);
+	border-bottom: var(--border-width) var(--border-style) var(--color--foreground);
 }
 
 .top-menu {
@@ -325,7 +316,7 @@ function hideGithubButton() {
 	height: var(--navbar--height);
 	align-items: center;
 	font-size: 0.9em;
-	font-weight: var(--font-weight-regular);
+	font-weight: var(--font-weight--regular);
 	overflow-x: auto;
 	overflow-y: hidden;
 }
@@ -334,9 +325,9 @@ function hideGithubButton() {
 	display: flex;
 	align-items: center;
 	align-self: stretch;
-	padding: var(--spacing-5xs) var(--spacing-m);
-	background-color: var(--color-background-xlight);
-	border-left: var(--border-width-base) var(--border-style-base) var(--color-foreground-base);
+	padding: var(--spacing--5xs) var(--spacing--md);
+	background-color: var(--color--background--light-3);
+	border-left: var(--border-width) var(--border-style) var(--color--foreground);
 }
 
 .close-github-button {
@@ -345,13 +336,13 @@ function hideGithubButton() {
 	right: 0;
 	top: 0;
 	transform: translate(50%, -46%);
-	color: var(--color-foreground-xdark);
-	background-color: var(--color-background-xlight);
+	color: var(--color--foreground--shade-2);
+	background-color: var(--color--background--light-3);
 	border-radius: 100%;
 	cursor: pointer;
 
 	&:hover {
-		color: var(--prim-color-primary-shade-100);
+		color: var(--p--color--primary-420);
 	}
 }
 .github-button-container {
@@ -360,5 +351,24 @@ function hideGithubButton() {
 
 .github-button:hover .close-github-button {
 	display: block;
+}
+
+@media (max-width: 1390px) {
+	.github-button {
+		padding: var(--spacing--5xs) var(--spacing--xs);
+	}
+}
+
+@media (max-width: 1340px) {
+	.github-button {
+		border-left: 0;
+		padding-left: 0;
+	}
+}
+
+@media (max-width: 1290px) {
+	.github-button {
+		display: none;
+	}
 }
 </style>

@@ -1,4 +1,5 @@
-import type { WebhookEntity } from '@n8n/db';
+import { createWorkflow, testDb, mockInstance } from '@n8n/backend-test-utils';
+import type { Project, WebhookEntity } from '@n8n/db';
 import { WorkflowRepository } from '@n8n/db';
 import { Container } from '@n8n/di';
 import { mock } from 'jest-mock-extended';
@@ -13,28 +14,29 @@ import type {
 	INodeTypeData,
 } from 'n8n-workflow';
 
+import { createOwner } from './shared/db/users';
+import * as utils from './shared/utils/';
+
 import { ActiveExecutions } from '@/active-executions';
 import { ActiveWorkflowManager } from '@/active-workflow-manager';
 import { ExecutionService } from '@/executions/execution.service';
 import { ExternalHooks } from '@/external-hooks';
 import { NodeTypes } from '@/node-types';
 import { Push } from '@/push';
+import { OwnershipService } from '@/services/ownership.service';
 import * as WebhookHelpers from '@/webhooks/webhook-helpers';
 import { WebhookService } from '@/webhooks/webhook.service';
 import * as AdditionalData from '@/workflow-execute-additional-data';
 import { WorkflowService } from '@/workflows/workflow.service';
-
-import { createOwner } from './shared/db/users';
-import { createWorkflow } from './shared/db/workflows';
-import * as testDb from './shared/test-db';
-import * as utils from './shared/utils/';
-import { mockInstance } from '../shared/mocking';
 
 mockInstance(ActiveExecutions);
 mockInstance(Push);
 mockInstance(ExternalSecretsProxy);
 mockInstance(ExecutionService);
 mockInstance(WorkflowService);
+mockInstance(OwnershipService, {
+	getWorkflowProjectCached: jest.fn().mockResolvedValue(mock<Project>({ id: 'project-id' })),
+});
 
 const webhookService = mockInstance(WebhookService);
 const externalHooks = mockInstance(ExternalHooks);
@@ -291,7 +293,7 @@ describe('addWebhooks()', () => {
 
 		webhookService.createWebhook.mockReturnValue(webhookEntity);
 
-		const additionalData = await AdditionalData.getBase('some-user-id');
+		const additionalData = await AdditionalData.getBase({ userId: 'some-user-id' });
 
 		const dbWorkflow = await createActiveWorkflow();
 

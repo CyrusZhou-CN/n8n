@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
-import type { IDataObject, ExecutionSummary, AnnotationVote, ExecutionStatus } from 'n8n-workflow';
+import type { IDataObject, ExecutionSummary, AnnotationVote } from 'n8n-workflow';
 import type {
 	ExecutionFilterType,
 	ExecutionsQueryFilter,
@@ -13,9 +13,12 @@ import type {
 } from '@/Interface';
 import { useRootStore } from '@n8n/stores/useRootStore';
 import { makeRestApiRequest } from '@n8n/rest-api-client';
-import { unflattenExecutionData } from '@/utils/executionUtils';
-import { executionFilterToQueryFilter, getDefaultExecutionFilters } from '@/utils/executionUtils';
-import { useProjectsStore } from '@/stores/projects.store';
+import {
+	unflattenExecutionData,
+	executionFilterToQueryFilter,
+	getDefaultExecutionFilters,
+} from '@/utils/executionUtils';
+import { useProjectsStore } from '@/features/projects/projects.store';
 import { useSettingsStore } from '@/stores/settings.store';
 
 export const useExecutionsStore = defineStore('executions', () => {
@@ -49,6 +52,7 @@ export const useExecutionsStore = defineStore('executions', () => {
 	const executionsById = ref<Record<string, ExecutionSummaryWithScopes>>({});
 	const executionsCount = ref(0);
 	const executionsCountEstimated = ref(false);
+	const concurrentExecutionsCount = ref(0);
 	const executions = computed(() => {
 		const data = Object.values(executionsById.value);
 
@@ -173,6 +177,7 @@ export const useExecutionsStore = defineStore('executions', () => {
 
 			executionsCount.value = data.count;
 			executionsCountEstimated.value = data.estimated;
+			concurrentExecutionsCount.value = data.concurrentExecutionsCount;
 			return data;
 		} finally {
 			loading.value = false;
@@ -241,8 +246,8 @@ export const useExecutionsStore = defineStore('executions', () => {
 		);
 	}
 
-	async function retryExecution(id: string, loadWorkflow?: boolean): Promise<ExecutionStatus> {
-		return await makeRestApiRequest(
+	async function retryExecution(id: string, loadWorkflow?: boolean): Promise<IExecutionResponse> {
+		const retriedExecution = await makeRestApiRequest<IExecutionResponse>(
 			rootStore.restApiContext,
 			'POST',
 			`/executions/${id}/retry`,
@@ -252,6 +257,7 @@ export const useExecutionsStore = defineStore('executions', () => {
 					}
 				: undefined,
 		);
+		return retriedExecution;
 	}
 
 	async function deleteExecutions(sendData: IExecutionDeleteFilter): Promise<void> {
@@ -281,6 +287,7 @@ export const useExecutionsStore = defineStore('executions', () => {
 		currentExecutionsById.value = {};
 		executionsCount.value = 0;
 		executionsCountEstimated.value = false;
+		concurrentExecutionsCount.value = 0;
 	}
 
 	function reset() {
@@ -298,6 +305,7 @@ export const useExecutionsStore = defineStore('executions', () => {
 		executions,
 		executionsCount,
 		executionsCountEstimated,
+		concurrentExecutionsCount,
 		executionsByWorkflowId,
 		currentExecutions,
 		currentExecutionsByWorkflowId,

@@ -10,7 +10,11 @@ import { deepCopy } from 'n8n-workflow';
 import { useNpsSurveyStore } from '@/stores/npsSurvey.store';
 import { useI18n } from '@n8n/i18n';
 import { useWorkflowSaving } from '@/composables/useWorkflowSaving';
+import type { IconColor } from '@n8n/design-system';
+import { type IAccordionItem } from '@n8n/design-system/components/N8nInfoAccordion/InfoAccordion.vue';
+import { type IconName } from '@n8n/design-system/components/N8nIcon/icons';
 
+import { N8nInfoAccordion, N8nLink, N8nTooltip } from '@n8n/design-system';
 interface IWorkflowSaveSettings {
 	saveFailedExecutions: boolean;
 	saveSuccessfulExecutions: boolean;
@@ -47,7 +51,7 @@ const workflowSaveSettings = ref({
 	saveTestExecutions: false,
 } as IWorkflowSaveSettings);
 
-const accordionItems = computed(() => [
+const accordionItems = computed((): IAccordionItem[] => [
 	{
 		id: 'productionExecutions',
 		label: locale.baseText('executionsLandingPage.emptyState.accordion.productionExecutions'),
@@ -63,7 +67,7 @@ const accordionItems = computed(() => [
 	{
 		id: 'manualExecutions',
 		label: locale.baseText('executionsLandingPage.emptyState.accordion.testExecutions'),
-		icon: workflowSaveSettings.value.saveTestExecutions ? 'check' : 'times',
+		icon: workflowSaveSettings.value.saveTestExecutions ? 'check' : 'x',
 		iconColor: workflowSaveSettings.value.saveTestExecutions ? 'success' : 'danger',
 	},
 ]);
@@ -77,13 +81,13 @@ const shouldExpandAccordion = computed(() => {
 		!workflowSaveSettings.value.saveTestExecutions
 	);
 });
-const productionExecutionsIcon = computed(() => {
+const productionExecutionsIcon = computed((): { color: IconColor; icon: IconName } => {
 	if (productionExecutionsStatus.value === 'saving') {
 		return { icon: 'check', color: 'success' };
 	} else if (productionExecutionsStatus.value === 'not-saving') {
-		return { icon: 'times', color: 'danger' };
+		return { icon: 'x', color: 'danger' };
 	}
-	return { icon: 'exclamation-triangle', color: 'warning' };
+	return { icon: 'triangle-alert', color: 'warning' };
 });
 const productionExecutionsStatus = computed(() => {
 	if (
@@ -99,14 +103,14 @@ const productionExecutionsStatus = computed(() => {
 	}
 });
 const workflowSettings = computed(() => deepCopy(workflowsStore.workflowSettings));
-const accordionIcon = computed(() => {
+const accordionIcon = computed((): { color: IconColor; icon: IconName } | undefined => {
 	if (
 		!workflowSaveSettings.value.saveTestExecutions ||
 		productionExecutionsStatus.value !== 'saving'
 	) {
-		return { icon: 'exclamation-triangle', color: 'warning' };
+		return { icon: 'triangle-alert', color: 'warning' };
 	}
-	return null;
+	return undefined;
 });
 const currentWorkflowId = computed(() => workflowsStore.workflowId);
 const isNewWorkflow = computed(() => {
@@ -233,11 +237,11 @@ async function onSaveWorkflowClick(): Promise<void> {
 		display: flex;
 		flex-direction: row;
 		justify-content: space-between;
-		padding-block: var(--spacing-2xs);
-		padding-inline: var(--spacing-s);
+		padding-block: var(--spacing--2xs);
+		padding-inline: var(--spacing--sm);
 		width: 100%;
 		user-select: none;
-		color: var(--color-text-base) !important;
+		color: var(--color--text) !important;
 	}
 
 	// Accordion description
@@ -245,7 +249,7 @@ async function onSaveWorkflowClick(): Promise<void> {
 		display: flex;
 		flex-direction: column;
 		width: 100%;
-		padding: 0 var(--spacing-s) var(--spacing-2xs) !important;
+		padding: 0 var(--spacing--sm) var(--spacing--2xs) !important;
 
 		span {
 			width: 100%;
@@ -255,7 +259,7 @@ async function onSaveWorkflowClick(): Promise<void> {
 	footer {
 		text-align: left;
 		width: 100%;
-		font-size: var(--font-size-2xs);
+		font-size: var(--font-size--2xs);
 	}
 
 	.disabled a {

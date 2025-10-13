@@ -26,11 +26,15 @@ import { useRunWorkflow } from '@/composables/useRunWorkflow';
 import { useRouter } from 'vue-router';
 import { useI18n } from '@n8n/i18n';
 import { useTelemetry } from '@/composables/useTelemetry';
-import { type IUpdateInformation } from '@/Interface';
+import type { ButtonSize, IUpdateInformation } from '@/Interface';
 import { generateCodeForAiTransform } from '@/components/ButtonParameter/utils';
 import { needsAgentInput } from '@/utils/nodes/nodeTransforms';
 import { useUIStore } from '@/stores/ui.store';
+import type { ButtonType } from '@n8n/design-system';
+import { type IconName } from '@n8n/design-system/components/N8nIcon/icons';
 
+import { N8nButton, N8nTooltip } from '@n8n/design-system';
+import { injectWorkflowState } from '@/composables/useWorkflowState';
 const NODE_TEST_STEP_POPUP_COUNT_KEY = 'N8N_NODE_TEST_STEP_POPUP_COUNT';
 const MAX_POPUP_COUNT = 10;
 const POPUP_UPDATE_DELAY = 3000;
@@ -41,15 +45,22 @@ const props = withDefaults(
 		telemetrySource: string;
 		disabled?: boolean;
 		label?: string;
-		type?: string;
-		size?: string;
+		type?: ButtonType;
+		size?: ButtonSize;
+		icon?: IconName;
+		square?: boolean;
 		transparent?: boolean;
 		hideIcon?: boolean;
+		hideLabel?: boolean;
 		tooltip?: string;
+		tooltipPlacement?: 'top' | 'bottom' | 'left' | 'right';
+		showLoadingSpinner?: boolean;
 	}>(),
 	{
 		disabled: false,
 		transparent: false,
+		square: false,
+		showLoadingSpinner: true,
 	},
 );
 
@@ -58,6 +69,8 @@ const emit = defineEmits<{
 	execute: [];
 	valueChanged: [value: IUpdateInformation];
 }>();
+
+const slots = defineSlots<{ persistentTooltipContent?: {} }>();
 
 defineOptions({
 	inheritAttrs: false,
@@ -70,6 +83,7 @@ const router = useRouter();
 const { runWorkflow, stopCurrentExecution } = useRunWorkflow({ router });
 
 const workflowsStore = useWorkflowsStore();
+const workflowState = injectWorkflowState();
 const externalHooks = useExternalHooks();
 const toast = useToast();
 const ndvStore = useNDVStore();
@@ -90,7 +104,8 @@ const isNodeRunning = computed(() => {
 	if (!workflowsStore.isWorkflowRunning || codeGenerationInProgress.value) return false;
 	const triggeredNode = workflowsStore.executedNode;
 	return (
-		workflowsStore.isNodeExecuting(node.value?.name ?? '') || triggeredNode === node.value?.name
+		workflowState.executingNode.isNodeExecuting(node.value?.name ?? '') ||
+		triggeredNode === node.value?.name
 	);
 });
 
@@ -187,6 +202,10 @@ const tooltipText = computed(() => {
 });
 
 const buttonLabel = computed(() => {
+	if (props.hideLabel) {
+		return '';
+	}
+
 	if (isListeningForEvents.value || isListeningForWorkflowEvents.value) {
 		return i18n.baseText('ndv.execute.stopListening');
 	}
@@ -220,9 +239,10 @@ const isLoading = computed(
 		(isNodeRunning.value && !isListeningForEvents.value && !isListeningForWorkflowEvents.value),
 );
 
-const buttonIcon = computed(() => {
+const buttonIcon = computed((): IconName | undefined => {
+	if (props.icon) return props.icon;
 	if (shouldGenerateCode.value) return 'terminal';
-	if (!isListeningForEvents.value && !props.hideIcon) return 'flask';
+	if (!isListeningForEvents.value && !props.hideIcon) return 'flask-conical';
 	return undefined;
 });
 
@@ -318,7 +338,7 @@ async function onClick() {
 	}
 
 	if (isChatNode.value || (isChatChild.value && ndvStore.isInputPanelEmpty)) {
-		ndvStore.setActiveNodeName(null);
+		ndvStore.unsetActiveNodeName();
 		workflowsStore.chatPartialExecutionDestinationNode = props.nodeName;
 		nodeViewEventBus.emit('openChat');
 	} else if (isListeningForEvents.value) {
@@ -376,15 +396,25 @@ async function onClick() {
 </script>
 
 <template>
-	<N8nTooltip placement="right" :disabled="!tooltipText" :content="tooltipText">
+	<N8nTooltip
+		:placement="tooltipPlacement ?? 'right'"
+		:disabled="!tooltipText && !slots.persistentTooltipContent"
+		:visible="slots.persistentTooltipContent ? true : undefined"
+	>
+		<template #content>
+			<slot name="persistentTooltipContent">
+				{{ tooltipText }}
+			</slot>
+		</template>
 		<N8nButton
 			v-bind="$attrs"
-			:loading="isLoading"
-			:disabled="disabled || !!disabledHint"
+			:loading="isLoading && showLoadingSpinner"
+			:disabled="disabled || !!disabledHint || (isLoading && !showLoadingSpinner)"
 			:label="buttonLabel"
 			:type="type"
 			:size="size"
 			:icon="buttonIcon"
+			:square="square"
 			:transparent-background="transparent"
 			:title="
 				!isTriggerNode && !tooltipText ? i18n.baseText('ndv.execute.testNode.description') : ''

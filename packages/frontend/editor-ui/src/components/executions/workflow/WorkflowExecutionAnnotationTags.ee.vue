@@ -8,6 +8,8 @@ import { createEventBus } from '@n8n/utils/event-bus';
 import type { ExecutionSummary } from 'n8n-workflow';
 import { computed, ref } from 'vue';
 
+import { ElTag } from 'element-plus';
+import { N8nButton } from '@n8n/design-system';
 const props = defineProps<{
 	execution: ExecutionSummary;
 }>();
@@ -103,9 +105,9 @@ const onTagsEditEsc = () => {
 					size="mini"
 					:outline="false"
 					:text="true"
-					@click="onTagsEditEnable"
 					data-test-id="new-tag-link"
 					icon="plus"
+					@click="onTagsEditEnable"
 				/>
 			</div>
 
@@ -119,9 +121,9 @@ const onTagsEditEsc = () => {
 				@click="onTagsEditEnable"
 			>
 				<span v-for="tag in tags" :key="tag.id" class="clickable">
-					<el-tag :title="tag.name" type="info" size="small" :disable-transitions="true">
+					<ElTag :title="tag.name" type="info" size="small" :disable-transitions="true">
 						{{ tag.name }}
-					</el-tag>
+					</ElTag>
 				</span>
 				<span :class="$style.addTagWrapper">
 					<N8nButton
@@ -130,9 +132,9 @@ const onTagsEditEsc = () => {
 						size="mini"
 						:outline="false"
 						:text="true"
-						@click="onTagsEditEnable"
 						data-test-id="new-tag-link"
 						icon="plus"
+						@click="onTagsEditEnable"
 					/>
 				</span>
 			</span>
@@ -147,42 +149,42 @@ const onTagsEditEsc = () => {
 
 .tags {
 	display: block;
-	margin-top: var(--spacing-4xs);
+	margin-top: var(--spacing--4xs);
 }
 
 .addTagButton {
 	height: 24px;
-	font-size: var(--font-size-2xs);
+	font-size: var(--font-size--2xs);
 	white-space: nowrap;
-	padding: var(--spacing-4xs) var(--spacing-3xs);
+	padding: var(--spacing--4xs) var(--spacing--3xs);
 	background-color: var(--color-button-secondary-background);
-	border: 1px solid var(--color-foreground-light);
-	border-radius: var(--border-radius-base);
-	font-weight: var(--font-weight-regular);
+	border: 1px solid var(--color--foreground--tint-1);
+	border-radius: var(--radius);
+	font-weight: var(--font-weight--regular);
 
 	&:hover {
 		color: $color-primary;
 		text-decoration: none;
 		background-color: var(--color-button-secondary-hover-background);
 		border: 1px solid var(--color-button-secondary-hover-active-focus-border);
-		border-radius: var(--border-radius-base);
+		border-radius: var(--radius);
 	}
 
 	span + span {
-		margin-left: var(--spacing-4xs);
+		margin-left: var(--spacing--4xs);
 	}
 }
 
 .addTagButtonIconOnly {
-	height: 22px;
-	width: 22px;
+	height: 20px;
+	width: 20px;
 }
 
 .tagsContainer {
 	display: inline-flex;
 	flex-wrap: wrap;
 	align-items: center;
-	gap: var(--spacing-4xs);
+	gap: var(--spacing--4xs);
 	max-width: 360px;
 
 	:global(.el-tag) {

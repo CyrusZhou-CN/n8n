@@ -12,13 +12,20 @@ import NodesListPanel from './Panel/NodesListPanel.vue';
 import { useCredentialsStore } from '@/stores/credentials.store';
 import { useUIStore } from '@/stores/ui.store';
 import { DRAG_EVENT_DATA_KEY } from '@/constants';
-import { useAssistantStore } from '@/stores/assistant.store';
-import N8nIconButton from '@n8n/design-system/components/N8nIconButton/IconButton.vue';
-import { useBuilderStore } from '@/stores/builder.store';
+import { useChatPanelStore } from '@/features/assistant/chatPanel.store';
+import type { NodeTypeSelectedPayload } from '@/Interface';
+import { onClickOutside } from '@vueuse/core';
+
+import { N8nIconButton } from '@n8n/design-system';
+// elements that should not trigger onClickOutside
+const OUTSIDE_CLICK_WHITELIST = [
+	// different modals
+	'.el-overlay-dialog',
+];
 
 export interface Props {
 	active?: boolean;
-	onNodeTypeSelected?: (nodeType: string[]) => void;
+	onNodeTypeSelected?: (value: NodeTypeSelectedPayload[]) => void;
 }
 
 const props = defineProps<Props>();
@@ -26,11 +33,10 @@ const { resetViewStacks } = useViewStacks();
 const { registerKeyHook } = useKeyboardNavigation();
 const emit = defineEmits<{
 	closeNodeCreator: [];
-	nodeTypeSelected: [value: string[]];
+	nodeTypeSelected: [value: NodeTypeSelectedPayload[]];
 }>();
 const uiStore = useUIStore();
-const assistantStore = useAssistantStore();
-const builderStore = useBuilderStore();
+const chatPanelStore = useChatPanelStore();
 
 const { setShowScrim, setActions, setMergeNodes } = useNodeCreatorStore();
 const { generateMergedNodesAndActions } = useActionsGenerator();
@@ -50,11 +56,8 @@ const nodeCreatorInlineStyle = computed(() => {
 });
 
 function getRightOffset() {
-	if (assistantStore.isAssistantOpen) {
-		return assistantStore.chatWidth;
-	}
-	if (builderStore.isAssistantOpen) {
-		return builderStore.chatWidth;
+	if (chatPanelStore.isOpen) {
+		return chatPanelStore.width;
 	}
 
 	return 0;
@@ -150,6 +153,14 @@ const { nodeCreator } = toRefs(state);
 onBeforeUnmount(() => {
 	unBindOnMouseUpOutside();
 });
+
+onClickOutside(
+	nodeCreator,
+	() => {
+		emit('closeNodeCreator');
+	},
+	{ ignore: OUTSIDE_CLICK_WHITELIST },
+);
 </script>
 
 <template>
@@ -164,7 +175,7 @@ onBeforeUnmount(() => {
 			v-if="active"
 			:class="$style.close"
 			type="secondary"
-			icon="times"
+			icon="x"
 			aria-label="Close Node Creator"
 			@click="emit('closeNodeCreator')"
 		/>
@@ -188,11 +199,11 @@ onBeforeUnmount(() => {
 
 <style module lang="scss">
 :global(strong) {
-	font-weight: var(--font-weight-bold);
+	font-weight: var(--font-weight--bold);
 }
 .nodeCreator {
 	--node-creator-width: #{$node-creator-width};
-	--node-icon-color: var(--color-text-base);
+	--node-icon-color: var(--color--text);
 	position: fixed;
 	top: $header-height;
 	bottom: 0;
@@ -222,8 +233,8 @@ onBeforeUnmount(() => {
 .close {
 	position: absolute;
 	z-index: calc(var(--z-index-node-creator) + 1);
-	top: var(--spacing-xs);
-	right: var(--spacing-xs);
+	top: var(--spacing--xs);
+	right: var(--spacing--xs);
 	background: transparent;
 	border: 0;
 	display: none;

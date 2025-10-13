@@ -53,9 +53,21 @@ import {
 	updateFromAIOverrideValues,
 	type FromAIOverride,
 } from '../../utils/fromAIOverrideUtils';
-import { N8nNotice } from '@n8n/design-system';
 import { completeExpressionSyntax } from '@/utils/expressions';
+import { useProjectsStore } from '@/features/projects/projects.store';
+import FromAiOverrideButton from '@/components/ParameterInputOverrides/FromAiOverrideButton.vue';
+import FromAiOverrideField from '@/components/ParameterInputOverrides/FromAiOverrideField.vue';
+import ParameterOverrideSelectableList from '@/components/ParameterInputOverrides/ParameterOverrideSelectableList.vue';
 
+import {
+	N8nIcon,
+	N8nInput,
+	N8nLink,
+	N8nNotice,
+	N8nOption,
+	N8nSelect,
+	N8nText,
+} from '@n8n/design-system';
 /**
  * Regular expression to check if the error message contains credential-related phrases.
  */
@@ -144,6 +156,7 @@ const ndvStore = useNDVStore();
 const rootStore = useRootStore();
 const uiStore = useUIStore();
 const workflowsStore = useWorkflowsStore();
+const projectsStore = useProjectsStore();
 
 const appName = computed(() => {
 	if (!props.node) {
@@ -186,8 +199,9 @@ const hasCredentialError = computed(() => {
 	);
 });
 
-const credentialsNotSet = computed(() => {
+const credentialsRequiredAndNotSet = computed(() => {
 	if (!props.node) return false;
+	if (skipCredentialsCheckInRLC.value) return false;
 	const nodeType = nodeTypesStore.getNodeType(props.node.type);
 	if (nodeType) {
 		const usesCredentials = nodeType.credentials !== undefined && nodeType.credentials.length > 0;
@@ -220,9 +234,9 @@ const hasMultipleModes = computed(() => {
 });
 
 const hasOnlyListMode = computed(() => hasOnlyListModeUtil(props.parameter));
-const valueToDisplay = computed<NodeParameterValue>(() => {
+const valueToDisplay = computed<INodeParameterResourceLocator['value']>(() => {
 	if (typeof props.modelValue !== 'object') {
-		return props.modelValue;
+		return `${props.modelValue}`;
 	}
 
 	if (isListMode.value) {
@@ -269,6 +283,7 @@ const currentRequestParams = computed(() => {
 		parameters: props.node?.parameters ?? {},
 		credentials: props.node?.credentials ?? {},
 		filter: searchFilter.value,
+		projectId: projectsStore.currentProjectId,
 	};
 });
 
@@ -315,6 +330,10 @@ const currentQueryError = computed(() => {
 
 const isSearchable = computed(() => !!getPropertyArgument(currentMode.value, 'searchable'));
 
+const skipCredentialsCheckInRLC = computed(
+	() => !!getPropertyArgument(currentMode.value, 'skipCredentialsCheckInRLC'),
+);
+
 const requiresSearchFilter = computed(
 	() => !!getPropertyArgument(currentMode.value, 'searchFilterRequired'),
 );
@@ -359,10 +378,13 @@ const allowNewResources = computed(() => {
 	return {
 		label: i18n.baseText(addNewResourceOptions.label as BaseTextKey, {
 			interpolate: {
-				resourceName: !!searchFilter.value ? searchFilter.value : addNewResourceOptions.defaultName,
+				resourceName: searchFilter.value
+					? searchFilter.value
+					: (addNewResourceOptions.defaultName ?? ''),
 			},
 		}),
 		method: addNewResourceOptions.method,
+		url: addNewResourceOptions.url,
 	};
 });
 
@@ -371,7 +393,23 @@ const handleAddResourceClick = async () => {
 		return;
 	}
 
-	const { method: addNewResourceMethodName } = allowNewResources.value;
+	const { method: addNewResourceMethodName, url: redirectUrl } = allowNewResources.value;
+
+	if (redirectUrl) {
+		let resolvedUrl = redirectUrl;
+
+		if (resolvedUrl.includes('{{$projectId}}')) {
+			resolvedUrl = resolvedUrl.replace(
+				/\{\{\$projectId\}\}/g,
+				projectsStore.currentProjectId ?? '',
+			);
+		}
+
+		hideResourceDropdown();
+		openResource(resolvedUrl);
+		return;
+	}
+
 	const resolvedNodeParameters = workflowHelpers.resolveRequiredParameters(
 		props.parameter,
 		currentRequestParams.value.parameters,
@@ -398,6 +436,9 @@ const handleAddResourceClick = async () => {
 	const newResource = (await nodeTypesStore.getNodeParameterActionResult(
 		requestParams,
 	)) as NodeParameterValue;
+	if (typeof newResource === 'boolean') {
+		return;
+	}
 
 	refreshList();
 	await loadResources();
@@ -406,7 +447,9 @@ const handleAddResourceClick = async () => {
 };
 
 const onAddResourceClicked = computed(() =>
-	allowNewResources.value ? handleAddResourceClick : undefined,
+	allowNewResources.value && (allowNewResources.value.method || allowNewResources.value.url)
+		? handleAddResourceClick
+		: undefined,
 );
 
 watch(currentQueryError, (curr, prev) => {
@@ -563,7 +606,7 @@ function findModeByName(name: string): INodePropertyMode | null {
 	return null;
 }
 
-function getModeLabel(mode: INodePropertyMode): string | null {
+function getModeLabel(mode: INodePropertyMode): string | undefined {
 	if (mode.name === 'id' || mode.name === 'url' || mode.name === 'list') {
 		return i18n.baseText(`resourceLocator.mode.${mode.name}`);
 	}
@@ -571,7 +614,7 @@ function getModeLabel(mode: INodePropertyMode): string | null {
 	return mode.displayName;
 }
 
-function onInputChange(value: NodeParameterValue): void {
+function onInputChange(value: INodeParameterResourceLocator['value']): void {
 	const params: INodeParameterResourceLocator = { __rl: true, value, mode: selectedMode.value };
 	if (isListMode.value) {
 		const resource = currentQueryResults.value.find((result) => result.value === value);
@@ -588,6 +631,12 @@ function onInputChange(value: NodeParameterValue): void {
 	emit('update:modelValue', params);
 }
 
+function onInputMouseDown(event: MouseEvent): void {
+	if (isListMode.value) {
+		event.preventDefault();
+	}
+}
+
 function onModeSelected(value: string): void {
 	if (typeof props.modelValue !== 'object') {
 		emit('update:modelValue', { __rl: true, value: props.modelValue, mode: value });
@@ -597,15 +646,11 @@ function onModeSelected(value: string): void {
 			mode: value,
 			value: props.modelValue.cachedResultUrl,
 		});
-	} else if (
-		value === 'id' &&
-		selectedMode.value === 'list' &&
-		props.modelValue &&
-		props.modelValue.value
-	) {
+	} else if (value === 'id' && selectedMode.value === 'list' && props.modelValue?.value) {
 		emit('update:modelValue', { __rl: true, mode: value, value: props.modelValue.value });
 	} else {
-		emit('update:modelValue', { __rl: true, mode: value, value: '' });
+		const currentValue = props.modelValue?.value ?? '';
+		emit('update:modelValue', { __rl: true, mode: value, value: currentValue });
 	}
 
 	trackEvent('User changed resource locator mode', { mode: value });
@@ -653,9 +698,13 @@ function loadResourcesDebounced() {
 }
 
 function setResponse(paramsKey: string, response: Partial<IResourceLocatorQuery>) {
+	// Force reactivity by creating a completely new cached responses object
+	const existingResponse = cachedResponses.value[paramsKey] || {};
+	const newResponse = { ...existingResponse, ...response };
+
 	cachedResponses.value = {
 		...cachedResponses.value,
-		[paramsKey]: { ...cachedResponses.value[paramsKey], ...response },
+		[paramsKey]: newResponse,
 	};
 }
 
@@ -664,7 +713,7 @@ async function loadResources() {
 	const paramsKey = currentRequestKey.value;
 	const cachedResponse = cachedResponses.value[paramsKey];
 
-	if (credentialsNotSet.value) {
+	if (credentialsRequiredAndNotSet.value) {
 		setResponse(paramsKey, { error: true });
 		return;
 	}
@@ -714,6 +763,7 @@ async function loadResources() {
 			methodName: loadOptionsMethod,
 			currentNodeParameters: resolvedNodeParameters,
 			credentials: props.node.credentials,
+			projectId: projectsStore.currentProjectId,
 		};
 
 		if (params.filter) {
@@ -726,19 +776,28 @@ async function loadResources() {
 
 		const response = await nodeTypesStore.getResourceLocatorResults(requestParams);
 
-		setResponse(paramsKey, {
+		const responseData = {
 			results: (cachedResponse?.results ?? []).concat(response.results),
 			nextPageToken: response.paginationToken ?? null,
 			loading: false,
 			error: false,
-		});
+		};
+
+		// Store response under the original key to prevent cache pollution
+		setResponse(paramsKey, responseData);
+
+		// If the key changed during the request, also store under current key to prevent infinite loading
+		const currentKey = currentRequestKey.value;
+		if (currentKey !== paramsKey) {
+			setResponse(currentKey, responseData);
+		}
 
 		if (params.filter && !hasCompletedASearch.value) {
 			hasCompletedASearch.value = true;
 			trackEvent('User searched resource locator list');
 		}
 	} catch (e) {
-		setResponse(paramsKey, {
+		const errorData = {
 			loading: false,
 			error: true,
 			errorDetails: {
@@ -747,7 +806,16 @@ async function loadResources() {
 				httpCode: e.httpCode,
 				stackTrace: e.stacktrace,
 			},
-		});
+		};
+
+		// Store error under the original key
+		setResponse(paramsKey, errorData);
+
+		// If the key changed during the request, also store under current key to prevent infinite loading
+		const currentKey = currentRequestKey.value;
+		if (currentKey !== paramsKey) {
+			setResponse(currentKey, errorData);
+		}
 	}
 }
 
@@ -823,7 +891,7 @@ function showResourceDropdown() {
 	resourceDropdownVisible.value = true;
 }
 
-function onListItemSelected(value: NodeParameterValue) {
+function onListItemSelected(value: INodeParameterResourceLocator['value']) {
 	onInputChange(value);
 	hideResourceDropdown();
 }
@@ -844,14 +912,10 @@ function onInputBlur(event: FocusEvent) {
 function applyOverride() {
 	if (!props.node || !fromAIOverride.value) return;
 
-	telemetry.track(
-		'User turned on fromAI override',
-		{
-			nodeType: props.node.type,
-			parameter: props.path,
-		},
-		{ withPostHog: true },
-	);
+	telemetry.track('User turned on fromAI override', {
+		nodeType: props.node.type,
+		parameter: props.path,
+	});
 	updateFromAIOverrideValues(fromAIOverride.value, props.modelValue.value?.toString() ?? '');
 
 	emit('update:modelValue', {
@@ -863,14 +927,10 @@ function applyOverride() {
 function removeOverride() {
 	if (!props.node || !fromAIOverride.value) return;
 
-	telemetry.track(
-		'User turned off fromAI override',
-		{
-			nodeType: props.node.type,
-			parameter: props.path,
-		},
-		{ withPostHog: true },
-	);
+	telemetry.track('User turned off fromAI override', {
+		nodeType: props.node.type,
+		parameter: props.path,
+	});
 	emit('update:modelValue', {
 		...props.modelValue,
 		value: buildValueFromOverride(fromAIOverride.value, props, false),
@@ -890,7 +950,7 @@ function removeOverride() {
 	>
 		<ResourceLocatorDropdown
 			ref="dropdownRef"
-			:model-value="modelValue ? modelValue.value : ''"
+			:model-value="modelValue"
 			:show="resourceDropdownVisible"
 			:filterable="isSearchable"
 			:filter-required="requiresSearchFilter"
@@ -909,23 +969,23 @@ function removeOverride() {
 		>
 			<template #error>
 				<div :class="$style.errorContainer" data-test-id="rlc-error-container">
-					<n8n-text
-						v-if="credentialsNotSet || currentResponse.errorDetails"
+					<N8nText
+						v-if="credentialsRequiredAndNotSet || currentResponse.errorDetails"
 						color="text-dark"
 						align="center"
 						tag="div"
 					>
 						{{ i18n.baseText('resourceLocator.mode.list.error.title') }}
-					</n8n-text>
+					</N8nText>
 					<div v-if="currentResponse.errorDetails" :class="$style.errorDetails">
-						<n8n-text size="small">
+						<N8nText size="small">
 							<span v-if="currentResponse.errorDetails.httpCode" data-test-id="rlc-error-code">
 								{{ currentResponse.errorDetails.httpCode }} -
 							</span>
 							<span data-test-id="rlc-error-message">{{
 								currentResponse.errorDetails.message
 							}}</span>
-						</n8n-text>
+						</N8nText>
 						<N8nNotice
 							v-if="currentResponse.errorDetails.description"
 							theme="warning"
@@ -934,9 +994,12 @@ function removeOverride() {
 							{{ currentResponse.errorDetails.description }}
 						</N8nNotice>
 					</div>
-					<div v-if="hasCredentialError || credentialsNotSet" data-test-id="permission-error-link">
+					<div
+						v-if="hasCredentialError || credentialsRequiredAndNotSet"
+						data-test-id="permission-error-link"
+					>
 						<a
-							v-if="credentialsNotSet"
+							v-if="credentialsRequiredAndNotSet"
 							:class="$style['credential-link']"
 							@click="createNewCredential"
 						>
@@ -965,7 +1028,7 @@ function removeOverride() {
 					]"
 				></div>
 				<div v-if="hasMultipleModes" :class="$style.modeSelector">
-					<n8n-select
+					<N8nSelect
 						:model-value="selectedMode"
 						:size="inputSize"
 						:disabled="isReadOnly"
@@ -973,7 +1036,7 @@ function removeOverride() {
 						data-test-id="rlc-mode-selector"
 						@update:model-value="onModeSelected"
 					>
-						<n8n-option
+						<N8nOption
 							v-for="mode in parameter.modes"
 							:key="mode.name"
 							:data-test-id="`mode-${mode.name}`"
@@ -987,8 +1050,8 @@ function removeOverride() {
 							"
 						>
 							{{ getModeLabel(mode) }}
-						</n8n-option>
-					</n8n-select>
+						</N8nOption>
+					</N8nSelect>
 				</div>
 
 				<div :class="$style.inputContainer" data-test-id="rlc-input-container">
@@ -1027,7 +1090,7 @@ function removeOverride() {
 									@update:model-value="onInputChange"
 									@modal-opener-click="emit('modalOpenerClick')"
 								/>
-								<n8n-input
+								<N8nInput
 									v-else
 									ref="inputRef"
 									:class="[
@@ -1048,7 +1111,7 @@ function removeOverride() {
 									@update:model-value="onInputChange"
 									@focus="onInputFocus"
 									@blur="onInputBlur"
-									@mousedown.prevent
+									@mousedown="onInputMouseDown"
 								>
 									<template v-if="isListMode" #suffix>
 										<i
@@ -1060,7 +1123,7 @@ function removeOverride() {
 											}"
 										/>
 									</template>
-								</n8n-input>
+								</N8nInput>
 								<div v-if="showOverrideButton" :class="$style.overrideButtonInline">
 									<FromAiOverrideButton @click="applyOverride" />
 								</div>
@@ -1073,9 +1136,9 @@ function removeOverride() {
 						:class="$style['parameter-issues']"
 					/>
 					<div v-else-if="urlValue" :class="$style.openResourceLink">
-						<n8n-link theme="text" @click.stop="openResource(urlValue)">
-							<font-awesome-icon icon="external-link-alt" :title="getLinkAlt(valueToDisplay)" />
-						</n8n-link>
+						<N8nLink theme="text" @click.stop="openResource(urlValue)">
+							<N8nIcon icon="external-link" :title="getLinkAlt(valueToDisplay)" />
+						</N8nLink>
 					</div>
 				</div>
 			</div>
@@ -1092,5 +1155,5 @@ function removeOverride() {
 </template>
 
 <style lang="scss" module>
-@import './resourceLocator.scss';
+@use './resourceLocator.scss';
 </style>

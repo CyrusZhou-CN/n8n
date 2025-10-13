@@ -8,11 +8,10 @@ import { useI18n } from '@n8n/i18n';
 import type { IUpdateInformation } from '@/Interface';
 import CollectionParameter from '@/components/CollectionParameter.vue';
 import ParameterInputFull from '@/components/ParameterInputFull.vue';
-import { N8nButton, N8nInputLabel, N8nText } from '@n8n/design-system';
-import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
 import { useNDVStore } from '@/stores/ndv.store';
 import { storeToRefs } from 'pinia';
 
+import { N8nButton, N8nIcon, N8nInputLabel, N8nText } from '@n8n/design-system';
 defineOptions({ name: 'MultipleParameter' });
 
 const props = withDefaults(
@@ -127,22 +126,22 @@ const valueChanged = (parameterData: IUpdateInformation) => {
 			:class="parameter.type"
 		>
 			<div v-if="!isReadOnly" class="delete-item clickable">
-				<FontAwesomeIcon
-					icon="trash"
+				<N8nIcon
+					icon="trash-2"
 					:title="i18n.baseText('multipleParameter.deleteItem')"
 					@click="deleteItem(index)"
 				/>
 				<div v-if="sortable">
-					<FontAwesomeIcon
+					<N8nIcon
 						v-if="index !== 0"
-						icon="angle-up"
+						icon="chevron-up"
 						class="clickable"
 						:title="i18n.baseText('multipleParameter.moveUp')"
 						@click="moveOptionUp(index)"
 					/>
-					<FontAwesomeIcon
+					<N8nIcon
 						v-if="index !== mutableValues.length - 1"
-						icon="angle-down"
+						icon="chevron-down"
 						class="clickable"
 						:title="i18n.baseText('multipleParameter.moveDown')"
 						@click="moveOptionDown(index)"
@@ -198,8 +197,8 @@ const valueChanged = (parameterData: IUpdateInformation) => {
 <style scoped lang="scss">
 .duplicate-parameter {
 	:deep(.button) {
-		--button-background-color: var(--color-background-base);
-		--button-border-color: var(--color-foreground-base);
+		--button-background-color: var(--color--background);
+		--button-border-color: var(--color--foreground);
 	}
 
 	:deep(.duplicate-parameter-item) {
@@ -217,14 +216,14 @@ const valueChanged = (parameterData: IUpdateInformation) => {
 	:deep(.duplicate-parameter-item + .duplicate-parameter-item) {
 		.collection-parameter-wrapper {
 			border-top: 1px dashed #999;
-			margin-top: var(--spacing-xs);
+			margin-top: var(--spacing--xs);
 		}
 	}
 }
 
 .duplicate-parameter-item {
 	~ .add-item-wrapper {
-		margin-top: var(--spacing-xs);
+		margin-top: var(--spacing--xs);
 	}
 }
 
@@ -236,15 +235,15 @@ const valueChanged = (parameterData: IUpdateInformation) => {
 	z-index: 999;
 	color: #f56c6c;
 	width: 15px;
-	font-size: var(--font-size-2xs);
+	font-size: var(--font-size--2xs);
 
 	:hover {
-		color: #ff0000;
+		color: #f00;
 	}
 }
 
 .no-items-exist {
-	margin: var(--spacing-xs) 0;
+	margin: var(--spacing--xs) 0;
 }
 </style>
 

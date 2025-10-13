@@ -2,6 +2,7 @@
 import { MAIN_HEADER_TABS } from '@/constants';
 import type { ITabBarItem } from '@/Interface';
 
+import { N8nRadioButtons } from '@n8n/design-system';
 withDefaults(
 	defineProps<{
 		items: ITabBarItem[];
@@ -16,8 +17,8 @@ const emit = defineEmits<{
 	'update:modelValue': [tab: MAIN_HEADER_TABS, event: MouseEvent];
 }>();
 
-function onUpdateModelValue(tab: MAIN_HEADER_TABS, event: MouseEvent): void {
-	emit('update:modelValue', tab, event);
+function onUpdateModelValue(tab: string, event: MouseEvent): void {
+	emit('update:modelValue', tab as MAIN_HEADER_TABS, event);
 }
 </script>
 
@@ -45,9 +46,9 @@ function onUpdateModelValue(tab: MAIN_HEADER_TABS, event: MouseEvent): void {
 	transform: translateX(-50%) translateY(50%);
 	min-height: 30px;
 	display: flex;
-	padding: var(--spacing-5xs);
-	background-color: var(--color-foreground-base);
-	border-radius: var(--border-radius-base);
+	padding: var(--spacing--5xs);
+	background-color: var(--color--foreground);
+	border-radius: var(--radius);
 	transition: all 150ms ease-in-out;
 	z-index: 1;
 }

@@ -2,7 +2,7 @@ import merge from 'lodash/merge';
 import userEvent from '@testing-library/user-event';
 
 import { SETTINGS_STORE_DEFAULT_STATE } from '@/__tests__/utils';
-import { ROLE } from '@/constants';
+import { ROLE } from '@n8n/api-types';
 import { STORES } from '@n8n/stores';
 
 import { createTestingPinia } from '@pinia/testing';
@@ -37,7 +37,7 @@ const initialState = {
 	},
 };
 
-const defaultRenderOptions: RenderOptions = {
+const defaultRenderOptions: RenderOptions<typeof BannerStack> = {
 	pinia: createTestingPinia({ initialState }),
 };
 

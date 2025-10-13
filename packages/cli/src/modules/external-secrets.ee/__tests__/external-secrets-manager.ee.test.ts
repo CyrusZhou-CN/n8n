@@ -1,3 +1,4 @@
+import { mockLogger } from '@n8n/backend-test-utils';
 import type { Settings, SettingsRepository } from '@n8n/db';
 import { captor, mock } from 'jest-mock-extended';
 
@@ -9,7 +10,7 @@ import {
 	FailedProvider,
 	MockProviders,
 } from '@test/external-secrets/utils';
-import { mockCipher, mockLogger } from '@test/mocking';
+import { mockCipher } from '@test/mocking';
 
 import { EXTERNAL_SECRETS_DB_KEY } from '../constants';
 import { ExternalSecretsManager } from '../external-secrets-manager.ee';
@@ -200,6 +201,15 @@ describe('External Secrets Manager', () => {
 
 			expect(reloadSpy).toHaveBeenCalledWith('dummy', undefined);
 		});
+
+		test('should refresh secrets after reloading all providers', async () => {
+			await manager.init();
+			const updateSecretsSpy = jest.spyOn(manager, 'updateSecrets');
+
+			await manager.reloadAllProviders();
+
+			expect(updateSecretsSpy).toHaveBeenCalledTimes(1);
+		});
 	});
 
 	describe('getProviderWithSettings', () => {
@@ -273,6 +283,15 @@ describe('External Secrets Manager', () => {
 					},
 				}),
 			);
+		});
+
+		test('should refresh secrets after saving provider settings', async () => {
+			await manager.init();
+			const updateSecretsSpy = jest.spyOn(manager, 'updateSecrets');
+
+			await manager.setProviderSettings('dummy', { foo: 'bar' });
+
+			expect(updateSecretsSpy).toHaveBeenCalledTimes(1);
 		});
 	});
 

@@ -3,13 +3,14 @@ import userEvent from '@testing-library/user-event';
 import { within, waitFor } from '@testing-library/vue';
 import ParameterOptions from './ParameterOptions.vue';
 import { setActivePinia, createPinia } from 'pinia';
+import { createTestNodeProperties } from '@/__tests__/mocks';
 
-const DEFAULT_PARAMETER = {
+const DEFAULT_PARAMETER = createTestNodeProperties({
 	displayName: 'Fields to Set',
 	name: 'assignments',
 	type: 'assignmentCollection',
 	default: {},
-};
+});
 
 describe('ParameterOptions', () => {
 	let pinia: ReturnType<typeof createPinia>;
@@ -77,7 +78,7 @@ describe('ParameterOptions', () => {
 				iconOrientation: 'horizontal',
 			},
 		});
-		expect(container.querySelector('[data-icon="ellipsis-h"]')).toBeInTheDocument();
+		expect(container.querySelector('[data-icon="ellipsis"]')).toBeInTheDocument();
 	});
 
 	it('should render custom actions', async () => {

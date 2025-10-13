@@ -1,7 +1,7 @@
-/* eslint-disable n8n-nodes-base/node-dirname-against-convention */
-
 import { ChatAnthropic } from '@langchain/anthropic';
 import type { LLMResult } from '@langchain/core/outputs';
+import { getProxyAgent } from '@utils/httpProxyAgent';
+import { getConnectionHintNoticeField } from '@utils/sharedFields';
 import {
 	NodeConnectionTypes,
 	type INodePropertyOptions,
@@ -12,12 +12,9 @@ import {
 	type SupplyData,
 } from 'n8n-workflow';
 
-import { getHttpProxyAgent } from '@utils/httpProxyAgent';
-import { getConnectionHintNoticeField } from '@utils/sharedFields';
-
-import { searchModels } from './methods/searchModels';
 import { makeN8nLlmFailedAttemptHandler } from '../n8nLlmFailedAttemptHandler';
 import { N8nLlmTracing } from '../N8nLlmTracing';
+import { searchModels } from './methods/searchModels';
 
 const modelField: INodeProperties = {
 	displayName: 'Model',
@@ -82,7 +79,7 @@ export class LmChatAnthropic implements INodeType {
 
 	description: INodeTypeDescription = {
 		displayName: 'Anthropic Chat Model',
-		// eslint-disable-next-line n8n-nodes-base/node-class-description-name-miscased
+
 		name: 'lmChatAnthropic',
 		icon: 'file:anthropic.svg',
 		group: ['transform'],
@@ -107,9 +104,9 @@ export class LmChatAnthropic implements INodeType {
 			},
 			alias: ['claude', 'sonnet', 'opus'],
 		},
-		// eslint-disable-next-line n8n-nodes-base/node-class-description-inputs-wrong-regular-node
+
 		inputs: [],
-		// eslint-disable-next-line n8n-nodes-base/node-class-description-outputs-wrong
+
 		outputs: [NodeConnectionTypes.AiLanguageModel],
 		outputNames: ['Model'],
 		credentials: [
@@ -287,8 +284,11 @@ export class LmChatAnthropic implements INodeType {
 		};
 		let invocationKwargs = {};
 
-		const tokensUsageParser = (llmOutput: LLMResult['llmOutput']) => {
-			const usage = (llmOutput?.usage as { input_tokens: number; output_tokens: number }) ?? {
+		const tokensUsageParser = (result: LLMResult) => {
+			const usage = (result?.llmOutput?.usage as {
+				input_tokens: number;
+				output_tokens: number;
+			}) ?? {
 				input_tokens: 0,
 				output_tokens: 0,
 			};
@@ -321,7 +321,7 @@ export class LmChatAnthropic implements INodeType {
 
 		const model = new ChatAnthropic({
 			anthropicApiKey: credentials.apiKey,
-			modelName,
+			model: modelName,
 			anthropicApiUrl: baseURL,
 			maxTokens: options.maxTokensToSample,
 			temperature: options.temperature,
@@ -331,9 +331,21 @@ export class LmChatAnthropic implements INodeType {
 			onFailedAttempt: makeN8nLlmFailedAttemptHandler(this),
 			invocationKwargs,
 			clientOptions: {
-				httpAgent: getHttpProxyAgent(),
+				fetchOptions: {
+					dispatcher: getProxyAgent(baseURL),
+				},
 			},
 		});
+
+		// Some Anthropic models do not support Langchain default of -1 for topP so we need to unset it
+		if (options.topP === undefined) {
+			delete model.topP;
+		}
+
+		// If topP is set to a value and temperature is not, unset default Langchain temperature
+		if (options.topP !== undefined && options.temperature === undefined) {
+			delete model.temperature;
+		}
 
 		return {
 			response: model,

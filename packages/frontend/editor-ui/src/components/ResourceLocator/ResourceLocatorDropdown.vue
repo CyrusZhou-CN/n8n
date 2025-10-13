@@ -1,17 +1,17 @@
 <script setup lang="ts">
 import { useI18n } from '@n8n/i18n';
 import type { IResourceLocatorResultExpanded } from '@/Interface';
-import { N8nLoading } from '@n8n/design-system';
 import type { EventBus } from '@n8n/utils/event-bus';
 import { createEventBus } from '@n8n/utils/event-bus';
-import type { NodeParameterValue } from 'n8n-workflow';
+import type { INodeParameterResourceLocator } from 'n8n-workflow';
 import { computed, onBeforeUnmount, onMounted, ref, useCssModule, watch } from 'vue';
 
+import { N8nBadge, N8nIcon, N8nInput, N8nLoading, N8nPopover } from '@n8n/design-system';
 const SEARCH_BAR_HEIGHT_PX = 40;
 const SCROLL_MARGIN_PX = 10;
 
 type Props = {
-	modelValue?: NodeParameterValue;
+	modelValue?: INodeParameterResourceLocator;
 	resources?: IResourceLocatorResultExpanded[];
 	show?: boolean;
 	filterable?: boolean;
@@ -21,10 +21,8 @@ type Props = {
 	errorView?: boolean;
 	filterRequired?: boolean;
 	width?: number;
+	allowNewResources?: { label?: string };
 	eventBus?: EventBus;
-	allowNewResources?: {
-		label?: string;
-	};
 };
 
 const props = withDefaults(defineProps<Props>(), {
@@ -43,7 +41,7 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 const emit = defineEmits<{
-	'update:modelValue': [value: NodeParameterValue];
+	'update:modelValue': [value: INodeParameterResourceLocator['value']];
 	loadMore: [];
 	filter: [filter: string];
 	addResourceClick: [];
@@ -60,14 +58,14 @@ const itemsRef = ref<HTMLDivElement[]>([]);
 
 const sortedResources = computed<IResourceLocatorResultExpanded[]>(() => {
 	const seen = new Set();
-	const { selected, notSelected } = props.resources.reduce(
+	const result = props.resources.reduce(
 		(acc, item: IResourceLocatorResultExpanded) => {
 			if (seen.has(item.value)) {
 				return acc;
 			}
 			seen.add(item.value);
 
-			if (props.modelValue && item.value === props.modelValue) {
+			if (props.modelValue && item.value === props.modelValue.value) {
 				acc.selected = item;
 			} else if (!item.isArchived) {
 				// Archived items are not shown in the list unless selected
@@ -82,11 +80,22 @@ const sortedResources = computed<IResourceLocatorResultExpanded[]>(() => {
 		},
 	);
 
-	if (selected) {
-		return [selected, ...notSelected];
+	// Resources are paginated, so the currently selected one may not actually be
+	// in the list.
+	// If that's the case we'll render the cached value.
+	if (result.selected === null && props.modelValue?.cachedResultName && props.modelValue.value) {
+		result.selected = {
+			name: props.modelValue.cachedResultName,
+			value: props.modelValue.value,
+			url: props.modelValue.cachedResultUrl,
+		};
 	}
 
-	return notSelected;
+	if (result.selected) {
+		return [result.selected, ...result.notSelected];
+	}
+
+	return result.notSelected;
 });
 
 watch(
@@ -105,12 +114,6 @@ watch(
 	},
 );
 
-watch(
-	() => props.loading,
-	() => {
-		setTimeout(() => onResultsEnd(), 0); // in case of filtering
-	},
-);
 onMounted(() => {
 	props.eventBus.on('keyDown', onKeyDown);
 });
@@ -164,7 +167,7 @@ function onKeyDown(e: KeyboardEvent) {
 		const selected = sortedResources.value[hoverIndex.value - 1]?.value;
 
 		// Selected resource can be empty when loading or empty results
-		if (selected) {
+		if (selected && typeof selected !== 'boolean') {
 			emit('update:modelValue', selected);
 		}
 	}
@@ -175,6 +178,10 @@ function onFilterInput(value: string) {
 }
 
 function onItemClick(selected: string | number | boolean) {
+	if (typeof selected === 'boolean') {
+		return;
+	}
+
 	emit('update:modelValue', selected);
 }
 
@@ -193,7 +200,7 @@ function onItemHoverLeave() {
 }
 
 function onResultsEnd() {
-	if (props.loading || !props.loading) {
+	if (props.loading || !props.hasMore) {
 		return;
 	}
 
@@ -215,24 +222,28 @@ defineExpose({ isWithinDropdown });
 </script>
 
 <template>
-	<n8n-popover
+	<N8nPopover
 		placement="bottom"
-		:width="width"
+		:width="props.width"
 		:popper-class="$style.popover"
-		:visible="show"
+		:visible="props.show"
 		:teleported="false"
 		data-test-id="resource-locator-dropdown"
 	>
-		<div v-if="errorView" :class="$style.messageContainer">
+		<div v-if="props.errorView" :class="$style.messageContainer">
 			<slot name="error"></slot>
 		</div>
-		<div v-if="filterable && !errorView" :class="$style.searchInput" @keydown="onKeyDown">
+		<div
+			v-if="props.filterable && !props.errorView"
+			:class="$style.searchInput"
+			@keydown="onKeyDown"
+		>
 			<N8nInput
 				ref="searchRef"
-				:model-value="filter"
+				:model-value="props.filter"
 				:clearable="true"
 				:placeholder="
-					allowNewResources.label
+					props.allowNewResources.label
 						? i18n.baseText('resourceLocator.placeholder.searchOrCreate')
 						: i18n.baseText('resourceLocator.placeholder.search')
 				"
@@ -240,27 +251,35 @@ defineExpose({ isWithinDropdown });
 				@update:model-value="onFilterInput"
 			>
 				<template #prefix>
-					<font-awesome-icon :class="$style.searchIcon" icon="search" />
+					<N8nIcon :class="$style.searchIcon" icon="search" />
 				</template>
 			</N8nInput>
 		</div>
-		<div v-if="filterRequired && !filter && !errorView && !loading" :class="$style.searchRequired">
+		<div
+			v-if="props.filterRequired && !props.filter && !props.errorView && !props.loading"
+			:class="$style.searchRequired"
+		>
 			{{ i18n.baseText('resourceLocator.mode.list.searchRequired') }}
 		</div>
 		<div
-			v-else-if="!errorView && !allowNewResources.label && sortedResources.length === 0 && !loading"
+			v-else-if="
+				!props.errorView &&
+				!props.allowNewResources.label &&
+				sortedResources.length === 0 &&
+				!props.loading
+			"
 			:class="$style.messageContainer"
 		>
 			{{ i18n.baseText('resourceLocator.mode.list.noResults') }}
 		</div>
 		<div
-			v-else-if="!errorView"
+			v-else-if="!props.errorView"
 			ref="resultsContainerRef"
 			:class="$style.container"
 			@scroll="onResultsEnd"
 		>
 			<div
-				v-if="allowNewResources.label"
+				v-if="props.allowNewResources.label"
 				key="addResourceKey"
 				ref="itemsRef"
 				data-test-id="rlc-item-add-resource"
@@ -273,8 +292,8 @@ defineExpose({ isWithinDropdown });
 				@click="() => emit('addResourceClick')"
 			>
 				<div :class="$style.resourceNameContainer">
-					<span :class="$style.addResourceText">{{ allowNewResources.label }}</span>
-					<font-awesome-icon :class="$style.addResourceIcon" :icon="['fa', 'plus']" />
+					<span :class="$style.addResourceText">{{ props.allowNewResources.label }}</span>
+					<N8nIcon :class="$style.addResourceIcon" icon="plus" />
 				</div>
 			</div>
 			<div
@@ -283,7 +302,7 @@ defineExpose({ isWithinDropdown });
 				ref="itemsRef"
 				:class="{
 					[$style.resourceItem]: true,
-					[$style.selected]: result.value === modelValue,
+					[$style.selected]: result.value === props.modelValue?.value,
 					[$style.hovering]: hoverIndex === i + 1,
 				}"
 				data-test-id="rlc-item"
@@ -300,15 +319,15 @@ defineExpose({ isWithinDropdown });
 					</span>
 				</div>
 				<div :class="$style.urlLink">
-					<font-awesome-icon
+					<N8nIcon
 						v-if="showHoverUrl && result.url && hoverIndex === i + 1"
-						icon="external-link-alt"
+						icon="external-link"
 						:title="result.linkAlt || i18n.baseText('resourceLocator.mode.list.openUrl')"
 						@click="openUrl($event, result.url)"
 					/>
 				</div>
 			</div>
-			<div v-if="loading && !errorView">
+			<div v-if="props.loading && !props.errorView">
 				<div v-for="i in 3" :key="i" :class="$style.loadingItem">
 					<N8nLoading :class="$style.loader" variant="p" :rows="1" />
 				</div>
@@ -317,16 +336,16 @@ defineExpose({ isWithinDropdown });
 		<template #reference>
 			<slot />
 		</template>
-	</n8n-popover>
+	</N8nPopover>
 </template>
 
 <style lang="scss" module>
 :root .popover {
 	--content-height: 236px;
 	padding: 0 !important;
-	border: var(--border-base);
+	border: var(--border);
 	display: flex;
-	max-height: calc(var(--content-height) + var(--spacing-xl));
+	max-height: calc(var(--content-height) + var(--spacing--xl));
 	flex-direction: column;
 
 	& ::-webkit-scrollbar {
@@ -335,12 +354,12 @@ defineExpose({ isWithinDropdown });
 
 	& ::-webkit-scrollbar-thumb {
 		border-radius: 12px;
-		background: var(--color-foreground-dark);
+		background: var(--color--foreground--shade-1);
 		border: 3px solid white;
 	}
 
 	& ::-webkit-scrollbar-thumb:hover {
-		background: var(--color-foreground-xdark);
+		background: var(--color--foreground--shade-2);
 	}
 }
 
@@ -357,31 +376,31 @@ defineExpose({ isWithinDropdown });
 }
 
 .searchInput {
-	border-bottom: var(--border-base);
+	border-bottom: var(--border);
 	--input-border-color: none;
-	--input-font-size: var(--font-size-2xs);
+	--input-font-size: var(--font-size--2xs);
 	width: 100%;
 	z-index: 1;
 }
 
 .selected {
-	color: var(--color-primary);
+	color: var(--color--primary);
 }
 
 .resourceItem {
 	display: flex;
-	padding: 0 var(--spacing-xs);
+	padding: 0 var(--spacing--xs);
 	white-space: nowrap;
 	height: 32px;
 	cursor: pointer;
 
 	&:hover {
-		background-color: var(--color-background-base);
+		background-color: var(--color--background);
 	}
 }
 
 .loadingItem {
-	padding: 10px var(--spacing-xs);
+	padding: 10px var(--spacing--xs);
 }
 
 .loader {
@@ -394,15 +413,15 @@ defineExpose({ isWithinDropdown });
 }
 
 .hovering {
-	background-color: var(--color-background-base);
+	background-color: var(--color--background);
 }
 
 .searchRequired {
 	height: 50px;
 	margin-top: 40px;
-	padding-left: var(--spacing-xs);
-	font-size: var(--font-size-xs);
-	color: var(--color-text-base);
+	padding-left: var(--spacing--xs);
+	font-size: var(--font-size--xs);
+	color: var(--color--text);
 	display: flex;
 	align-items: center;
 }
@@ -410,34 +429,39 @@ defineExpose({ isWithinDropdown });
 .urlLink {
 	display: flex;
 	align-items: center;
-	font-size: var(--font-size-3xs);
-	color: var(--color-text-base);
-	margin-left: var(--spacing-2xs);
+	font-size: var(--font-size--3xs);
+	color: var(--color--text);
+	margin-left: var(--spacing--2xs);
 
 	&:hover {
-		color: var(--color-primary);
+		color: var(--color--primary);
 	}
 }
 
 .resourceNameContainer {
-	font-size: var(--font-size-2xs);
-	overflow: hidden;
-	text-overflow: ellipsis;
-	display: inline-block;
+	display: flex;
+	align-items: center;
+	font-size: var(--font-size--2xs);
+	min-width: 0;
 	align-self: center;
 }
 
+.resourceNameContainer > :first-child {
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
 .searchIcon {
-	color: var(--color-text-light);
+	color: var(--color--text--tint-1);
 }
 
 .addResourceText {
-	font-weight: var(--font-weight-bold);
+	font-weight: var(--font-weight--bold);
 }
 
 .addResourceIcon {
-	color: var(--color-text-light);
+	color: var(--color--text--tint-1);
 
-	margin-left: var(--spacing-2xs);
+	margin-left: var(--spacing--2xs);
 }
 </style>

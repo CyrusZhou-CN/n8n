@@ -1,21 +1,15 @@
 <script setup lang="ts">
+import LogsOverviewRows from '@/features/logs/components/LogsOverviewRows.vue';
 import LogsPanelHeader from '@/features/logs/components/LogsPanelHeader.vue';
-import { useClearExecutionButtonVisible } from '@/features/logs/composables/useClearExecutionButtonVisible';
-import { useI18n } from '@n8n/i18n';
-import { N8nButton, N8nRadioButtons, N8nText, N8nTooltip } from '@n8n/design-system';
-import { computed, nextTick, toRef, watch } from 'vue';
-import LogsOverviewRow from '@/features/logs/components/LogsOverviewRow.vue';
-import { useRunWorkflow } from '@/composables/useRunWorkflow';
-import { useRouter } from 'vue-router';
 import LogsViewExecutionSummary from '@/features/logs/components/LogsViewExecutionSummary.vue';
-import {
-	getSubtreeTotalConsumedTokens,
-	getTotalConsumedTokens,
-	hasSubExecution,
-} from '@/features/logs/logs.utils';
-import { useVirtualList } from '@vueuse/core';
-import { type IExecutionResponse } from '@/Interface';
+import { useClearExecutionButtonVisible } from '@/features/logs/composables/useClearExecutionButtonVisible';
 import type { LatestNodeInfo, LogEntry } from '@/features/logs/logs.types';
+import { getSubtreeTotalConsumedTokens, getTotalConsumedTokens } from '@/features/logs/logs.utils';
+import { type IExecutionResponse } from '@/Interface';
+import { getScrollbarWidth } from '@/utils/htmlUtils';
+import { N8nButton, N8nRadioButtons, N8nText, N8nTooltip } from '@n8n/design-system';
+import { useI18n } from '@n8n/i18n';
+import { computed } from 'vue';
 
 const {
 	isOpen,
@@ -26,6 +20,7 @@ const {
 	entries,
 	flatLogEntries,
 	latestNodeInfo,
+	isHeaderClickable,
 } = defineProps<{
 	isOpen: boolean;
 	selected?: LogEntry;
@@ -35,6 +30,7 @@ const {
 	entries: LogEntry[];
 	flatLogEntries: LogEntry[];
 	latestNodeInfo: Record<string, LatestNodeInfo>;
+	isHeaderClickable: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -43,20 +39,18 @@ const emit = defineEmits<{
 	clearExecutionData: [];
 	openNdv: [LogEntry];
 	toggleExpanded: [LogEntry];
-	loadSubExecution: [LogEntry];
 }>();
 
 defineSlots<{ actions: {} }>();
 
 const locale = useI18n();
-const router = useRouter();
-const runWorkflow = useRunWorkflow({ router });
 const isClearExecutionButtonVisible = useClearExecutionButtonVisible();
 const isEmpty = computed(() => flatLogEntries.length === 0 || execution === undefined);
 const switchViewOptions = computed(() => [
 	{ label: locale.baseText('logs.overview.header.switch.overview'), value: 'overview' as const },
 	{ label: locale.baseText('logs.overview.header.switch.details'), value: 'details' as const },
 ]);
+const hasStaticScrollbar = getScrollbarWidth() > 0;
 const consumedTokens = computed(() =>
 	getTotalConsumedTokens(
 		...entries.map((entry) =>
@@ -67,59 +61,31 @@ const consumedTokens = computed(() =>
 		),
 	),
 );
-
+const timeTook = computed(() =>
+	execution?.startedAt && execution.stoppedAt
+		? +new Date(execution.stoppedAt) - +new Date(execution.startedAt)
+		: undefined,
+);
 const shouldShowTokenCountColumn = computed(
 	() =>
 		consumedTokens.value.totalTokens > 0 ||
 		entries.some((entry) => getSubtreeTotalConsumedTokens(entry, true).totalTokens > 0),
 );
-const virtualList = useVirtualList(
-	toRef(() => flatLogEntries),
-	{ itemHeight: 32 },
-);
 
 function handleSwitchView(value: 'overview' | 'details') {
 	emit('select', value === 'overview' ? undefined : flatLogEntries[0]);
 }
-
-function handleToggleExpanded(treeNode: LogEntry) {
-	if (hasSubExecution(treeNode) && treeNode.children.length === 0) {
-		emit('loadSubExecution', treeNode);
-		return;
-	}
-	emit('toggleExpanded', treeNode);
-}
-
-async function handleTriggerPartialExecution(treeNode: LogEntry) {
-	const latestName = latestNodeInfo[treeNode.node.id]?.name ?? treeNode.node.name;
-
-	if (latestName) {
-		await runWorkflow.runWorkflow({ destinationNode: latestName });
-	}
-}
-
-// Scroll selected row into view
-watch(
-	() => selected,
-	async (selection) => {
-		if (selection && virtualList.list.value.every((e) => e.data.id !== selection.id)) {
-			const index = flatLogEntries.findIndex((e) => e.id === selection?.id);
-
-			if (index >= 0) {
-				// Wait for the node to be added to the list, and then scroll
-				await nextTick(() => virtualList.scrollTo(index));
-			}
-		}
-	},
-	{ immediate: true },
-);
 </script>
 
 <template>
-	<div :class="$style.container" data-test-id="logs-overview">
+	<div
+		:class="[$style.container, hasStaticScrollbar ? $style.staticScrollBar : '']"
+		data-test-id="logs-overview"
+	>
 		<LogsPanelHeader
 			:title="locale.baseText('logs.overview.header.title')"
 			data-test-id="logs-overview-header"
+			:is-clickable="isHeaderClickable"
 			@click="emit('clickHeader')"
 		>
 			<template #actions>
@@ -130,7 +96,7 @@ watch(
 					<N8nButton
 						size="mini"
 						type="secondary"
-						icon="trash"
+						icon="trash-2"
 						icon-size="medium"
 						data-test-id="clear-execution-data-button"
 						:class="$style.clearButton"
@@ -163,32 +129,20 @@ watch(
 					:status="execution.status"
 					:consumed-tokens="consumedTokens"
 					:start-time="+new Date(execution.startedAt)"
-					:time-took="
-						execution.startedAt && execution.stoppedAt
-							? +new Date(execution.stoppedAt) - +new Date(execution.startedAt)
-							: undefined
-					"
+					:time-took="timeTook"
 				/>
-				<div :class="$style.tree" v-bind="virtualList.containerProps">
-					<div v-bind="virtualList.wrapperProps.value" role="tree">
-						<LogsOverviewRow
-							v-for="{ data, index } of virtualList.list.value"
-							:key="index"
-							:data="data"
-							:is-read-only="isReadOnly"
-							:is-selected="data.id === selected?.id"
-							:is-compact="isCompact"
-							:should-show-token-count-column="shouldShowTokenCountColumn"
-							:latest-info="latestNodeInfo[data.node.id]"
-							:expanded="virtualList.list.value[index + 1]?.data.parent?.id === data.id"
-							:can-open-ndv="data.executionId === execution?.id"
-							@toggle-expanded="handleToggleExpanded(data)"
-							@open-ndv="emit('openNdv', data)"
-							@trigger-partial-execution="handleTriggerPartialExecution(data)"
-							@toggle-selected="emit('select', selected?.id === data.id ? undefined : data)"
-						/>
-					</div>
-				</div>
+				<LogsOverviewRows
+					:is-read-only="isReadOnly"
+					:selected="selected"
+					:is-compact="isCompact"
+					:should-show-token-count-column="shouldShowTokenCountColumn"
+					:latest-node-info="latestNodeInfo"
+					:flat-log-entries="flatLogEntries"
+					:can-open-ndv="true"
+					@toggle-expanded="emit('toggleExpanded', $event)"
+					@open-ndv="emit('openNdv', $event)"
+					@select="emit('select', $event)"
+				/>
 				<N8nRadioButtons
 					size="small-medium"
 					:class="$style.switchViewButtons"
@@ -202,7 +156,7 @@ watch(
 </template>
 
 <style lang="scss" module>
-@import '@/styles/variables';
+@use '@/styles/variables' as vars;
 
 .container {
 	flex-grow: 1;
@@ -211,13 +165,13 @@ watch(
 	flex-direction: column;
 	align-items: stretch;
 	overflow: hidden;
-	background-color: var(--color-foreground-xlight);
+	background-color: var(--color--foreground--tint-2);
 }
 
 .clearButton {
 	border: none;
-	color: var(--color-text-light);
-	gap: var(--spacing-5xs);
+	color: var(--color--text--tint-1);
+	gap: var(--spacing--5xs);
 }
 
 .content {
@@ -228,6 +182,7 @@ watch(
 	flex-direction: column;
 	align-items: stretch;
 	justify-content: stretch;
+	padding-right: var(--spacing--5xs);
 
 	&.empty {
 		align-items: center;
@@ -241,17 +196,7 @@ watch(
 }
 
 .summary {
-	padding: var(--spacing-2xs);
-}
-
-.tree {
-	padding: 0 var(--spacing-2xs) var(--spacing-2xs) var(--spacing-2xs);
-
-	scroll-padding-block: var(--spacing-3xs);
-
-	& :global(.el-icon) {
-		display: none;
-	}
+	padding: var(--spacing--2xs);
 }
 
 .switchViewButtons {
@@ -259,10 +204,10 @@ watch(
 	z-index: 10; /* higher than log entry rows background */
 	right: 0;
 	top: 0;
-	margin: var(--spacing-4xs) var(--spacing-2xs);
+	margin: var(--spacing--4xs) var(--spacing--2xs);
 	visibility: hidden;
 	opacity: 0;
-	transition: opacity 0.3s $ease-out-expo;
+	transition: opacity 0.3s vars.$ease-out-expo;
 
 	.content:hover & {
 		visibility: visible;

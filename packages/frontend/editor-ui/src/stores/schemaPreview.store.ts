@@ -48,7 +48,7 @@ export const useSchemaPreviewStore = defineStore('schemaPreview', () => {
 		}
 	}
 
-	async function trackSchemaPreviewExecution(pushEvent: PushPayload<'nodeExecuteAfter'>) {
+	async function trackSchemaPreviewExecution(pushEvent: PushPayload<'nodeExecuteAfterData'>) {
 		if (schemaPreviews.size === 0 || pushEvent.data.executionStatus !== 'success') {
 			return;
 		}
@@ -67,7 +67,7 @@ export const useSchemaPreviewStore = defineStore('schemaPreview', () => {
 			getSchemaPreviewKey({ nodeType: type, version: typeVersion, resource, operation }),
 		);
 
-		if (!result || !result.ok) return;
+		if (!result?.ok) return;
 
 		telemetry.track('User executed node with schema preview', {
 			node_id: id,

@@ -4,26 +4,29 @@ import { Prec } from '@codemirror/state';
 import { dropCursor, EditorView, keymap } from '@codemirror/view';
 import { computed, onMounted, ref, watch } from 'vue';
 
-import { n8nAutocompletion, n8nLang } from '@/plugins/codemirror/n8nLang';
+import { n8nAutocompletion, n8nLang } from '@/features/editors/plugins/codemirror/n8nLang';
 import { forceParse } from '@/utils/forceParse';
 import { inputTheme } from './theme';
 
-import { useExpressionEditor } from '@/composables/useExpressionEditor';
-import { infoBoxTooltips } from '@/plugins/codemirror/tooltips/InfoBoxTooltip';
+import { useExpressionEditor } from '@/features/editors/composables/useExpressionEditor';
+import { infoBoxTooltips } from '@/features/editors/plugins/codemirror/tooltips/InfoBoxTooltip';
 import type { Segment } from '@/types/expressions';
 import { removeExpressionPrefix } from '@/utils/expressions';
-import { mappingDropCursor } from '@/plugins/codemirror/dragAndDrop';
-import { editorKeymap } from '@/plugins/codemirror/keymap';
-import { expressionCloseBrackets } from '@/plugins/codemirror/expressionCloseBrackets';
+import { mappingDropCursor } from '@/features/editors/plugins/codemirror/dragAndDrop';
+import { editorKeymap } from '@/features/editors/plugins/codemirror/keymap';
+import { expressionCloseBrackets } from '@/features/editors/plugins/codemirror/expressionCloseBrackets';
+import type { TargetNodeParameterContext } from '@/Interface';
 
 type Props = {
 	modelValue: string;
 	path: string;
+	targetNodeParameterContext?: TargetNodeParameterContext;
 	isReadOnly?: boolean;
 };
 
 const props = withDefaults(defineProps<Props>(), {
 	isReadOnly: false,
+	targetNodeParameterContext: undefined,
 });
 
 const emit = defineEmits<{
@@ -52,7 +55,11 @@ const { segments, readEditorValue, editor, hasFocus, focus } = useExpressionEdit
 	editorValue,
 	extensions,
 	isReadOnly: computed(() => props.isReadOnly),
-	autocompleteTelemetry: { enabled: true, parameterPath: props.path },
+	autocompleteTelemetry: {
+		enabled: true,
+		parameterPath: props.path,
+	},
+	targetNodeParameterContext: props.targetNodeParameterContext,
 });
 
 watch(
@@ -79,7 +86,7 @@ onMounted(() => {
 	focus();
 });
 
-defineExpose({ editor });
+defineExpose({ editor, focus });
 </script>
 
 <template>
@@ -89,11 +96,11 @@ defineExpose({ editor });
 <style lang="scss" module>
 .editor {
 	:global(.cm-content) {
-		border-radius: var(--border-radius-base);
+		border-radius: var(--radius);
 		&[aria-readonly='true'] {
-			--disabled-fill: var(--color-background-base);
-			background-color: var(--disabled-fill, var(--color-background-light));
-			color: var(--disabled-color, var(--color-text-base));
+			--disabled-fill: var(--color--background);
+			background-color: var(--disabled-fill, var(--color--background--light-2));
+			color: var(--disabled-color, var(--color--text));
 			cursor: not-allowed;
 		}
 	}

@@ -9,7 +9,9 @@ export class Column {
 		| 'json'
 		| 'timestamptz'
 		| 'timestamp'
-		| 'uuid';
+		| 'uuid'
+		| 'double'
+		| 'bigint';
 
 	private isGenerated = false;
 
@@ -36,6 +38,16 @@ export class Column {
 
 	get int() {
 		this.type = 'int';
+		return this;
+	}
+
+	get bigint() {
+		this.type = 'bigint';
+		return this;
+	}
+
+	get double() {
+		this.type = 'double';
 		return this;
 	}
 
@@ -124,7 +136,6 @@ export class Column {
 		return this;
 	}
 
-	// eslint-disable-next-line complexity
 	toOptions(driver: Driver): TableColumnOptions {
 		const {
 			name,
@@ -163,6 +174,16 @@ export class Column {
 			if (isMysql) options.type = 'varchar(36)';
 			// we haven't been defining length on "uuid" varchar on sqlite
 			if (isSqlite) options.type = 'varchar';
+		} else if (type === 'double') {
+			if (isPostgres) {
+				options.type = 'double precision';
+			} else if (isMysql) {
+				options.type = 'double';
+			} else if (isSqlite) {
+				options.type = 'real';
+			}
+		} else if (type === 'bigint') {
+			options.type = 'bigint';
 		}
 
 		if (

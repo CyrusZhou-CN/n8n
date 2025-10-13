@@ -2,16 +2,21 @@
 import { ref, computed, onBeforeMount } from 'vue';
 import { useToast } from '@/composables/useToast';
 import Modal from '@/components/Modal.vue';
-import ProjectSharing from '@/components/Projects/ProjectSharing.vue';
+import ProjectSharing from '@/features/projects/components/ProjectSharing.vue';
 import { useUsersStore } from '@/stores/users.store';
-import { useProjectsStore } from '@/stores/projects.store';
+import { useProjectsStore } from '@/features/projects/projects.store';
 import { createEventBus } from '@n8n/utils/event-bus';
-import type { ProjectSharingData } from '@/types/projects.types';
+import type { ProjectSharingData } from '@/features/projects/projects.types';
 import { useI18n } from '@n8n/i18n';
 
+import { ElRadio } from 'element-plus';
+import { N8nButton, N8nInput, N8nInputLabel, N8nText } from '@n8n/design-system';
 const props = defineProps<{
 	modalName: string;
-	activeId: string;
+	data: {
+		userId: string;
+		afterDelete?: () => Promise<void>;
+	};
 }>();
 
 const modalBus = createEventBus();
@@ -25,17 +30,18 @@ const usersStore = useUsersStore();
 const projectsStore = useProjectsStore();
 
 const userToDelete = computed(() => {
-	if (!props.activeId) return null;
+	if (!props.data?.userId) return null;
 
-	return usersStore.usersById[props.activeId];
+	return usersStore.usersList.state.items.find((user) => user.id === props.data.userId);
 });
 
-const isPending = computed(() => {
-	return userToDelete.value ? !userToDelete.value.firstName : false;
-});
+const isPending = computed(() => !userToDelete.value?.firstName);
 
 const title = computed(() => {
-	const user = userToDelete.value?.fullName ?? userToDelete.value?.email ?? '';
+	const user =
+		userToDelete.value?.firstName && userToDelete.value.lastName
+			? `${userToDelete.value.firstName} ${userToDelete.value.lastName}`
+			: (userToDelete.value?.email ?? '');
 
 	return i18n.baseText('settings.users.deleteUser', { interpolate: { user } });
 });
@@ -52,11 +58,7 @@ const enabled = computed(() => {
 		return true;
 	}
 
-	if (operation.value === 'transfer' && selectedProject.value) {
-		return true;
-	}
-
-	return false;
+	return !!(operation.value === 'transfer' && selectedProject.value);
 });
 
 const projects = computed(() => {
@@ -81,7 +83,7 @@ async function onSubmit() {
 	try {
 		loading.value = true;
 
-		const params = { id: props.activeId } as { id: string; transferId?: string };
+		const params = { id: props.data.userId } as { id: string; transferId?: string };
 		if (operation.value === 'transfer' && selectedProject.value) {
 			params.transferId = selectedProject.value.id;
 		}
@@ -104,6 +106,7 @@ async function onSubmit() {
 			message,
 		});
 
+		await props.data.afterDelete?.();
 		modalBus.emit('close');
 	} catch (error) {
 		showError(error, i18n.baseText('settings.users.userDeletedError'));
@@ -125,29 +128,29 @@ async function onSubmit() {
 		<template #content>
 			<div>
 				<div v-if="isPending">
-					<n8n-text color="text-base">{{
+					<N8nText color="text-base">{{
 						i18n.baseText('settings.users.confirmUserDeletion')
-					}}</n8n-text>
+					}}</N8nText>
 				</div>
 				<div v-else :class="$style.content">
 					<div>
-						<n8n-text color="text-base">{{
+						<N8nText color="text-base">{{
 							i18n.baseText('settings.users.confirmDataHandlingAfterDeletion')
-						}}</n8n-text>
+						}}</N8nText>
 					</div>
-					<el-radio
+					<ElRadio
 						v-model="operation"
 						label="transfer"
 						@update:model-value="operation = 'transfer'"
 					>
-						<n8n-text color="text-dark">{{
+						<N8nText color="text-dark">{{
 							i18n.baseText('settings.users.transferWorkflowsAndCredentials')
-						}}</n8n-text>
-					</el-radio>
+						}}</N8nText>
+					</ElRadio>
 					<div v-if="operation === 'transfer'" :class="$style.optionInput">
-						<n8n-text color="text-dark">{{
+						<N8nText color="text-dark">{{
 							i18n.baseText('settings.users.transferWorkflowsAndCredentials.user')
-						}}</n8n-text>
+						}}</N8nText>
 						<ProjectSharing
 							v-model="selectedProject"
 							class="pt-2xs"
@@ -157,28 +160,28 @@ async function onSubmit() {
 							"
 						/>
 					</div>
-					<el-radio v-model="operation" label="delete" @update:model-value="operation = 'delete'">
-						<n8n-text color="text-dark">{{
+					<ElRadio v-model="operation" label="delete" @update:model-value="operation = 'delete'">
+						<N8nText color="text-dark">{{
 							i18n.baseText('settings.users.deleteWorkflowsAndCredentials')
-						}}</n8n-text>
-					</el-radio>
+						}}</N8nText>
+					</ElRadio>
 					<div
 						v-if="operation === 'delete'"
 						:class="$style.optionInput"
 						data-test-id="delete-data-input"
 					>
-						<n8n-input-label :label="i18n.baseText('settings.users.deleteConfirmationMessage')">
-							<n8n-input
+						<N8nInputLabel :label="i18n.baseText('settings.users.deleteConfirmationMessage')">
+							<N8nInput
 								v-model="deleteConfirmText"
 								:placeholder="i18n.baseText('settings.users.deleteConfirmationText')"
 							/>
-						</n8n-input-label>
+						</N8nInputLabel>
 					</div>
 				</div>
 			</div>
 		</template>
 		<template #footer>
-			<n8n-button
+			<N8nButton
 				:loading="loading"
 				:disabled="!enabled"
 				:label="i18n.baseText('settings.users.delete')"
@@ -192,19 +195,19 @@ async function onSubmit() {
 
 <style lang="scss" module>
 .content {
-	padding-bottom: var(--spacing-2xs);
+	padding-bottom: var(--spacing--2xs);
 	> * {
-		margin-bottom: var(--spacing-s);
+		margin-bottom: var(--spacing--sm);
 	}
 }
 
 .innerContent {
 	> * {
-		margin-bottom: var(--spacing-2xs);
+		margin-bottom: var(--spacing--2xs);
 	}
 }
 
 .optionInput {
-	padding-left: var(--spacing-l);
+	padding-left: var(--spacing--lg);
 }
 </style>

@@ -13,6 +13,7 @@ export class AIAssistant extends BasePage {
 
 	getters = {
 		askAssistantFloatingButton: () => cy.getByTestId('ask-assistant-floating-button'),
+		askAssistantCanvasActionButton: () => cy.getByTestId('ask-assistant-canvas-action-button'),
 		askAssistantSidebar: () => cy.getByTestId('ask-assistant-sidebar'),
 		askAssistantSidebarResizer: () =>
 			this.getters.askAssistantSidebar().find('[class^=_resizer][data-dir=left]').first(),
@@ -47,13 +48,17 @@ export class AIAssistant extends BasePage {
 			cy.disableFeature('aiAssistant');
 		},
 		sendMessage: (message: string) => {
-			this.getters.chatInput().type(message).type('{enter}');
+			this.getters.chatInput().type(message).type('{shift+enter}');
 		},
 		closeChat: () => {
 			this.getters.closeChatButton().click();
 			this.getters.askAssistantChat().should('not.be.visible');
 		},
-		openChat: () => {
+		openChatFromCanvas: () => {
+			this.getters.askAssistantCanvasActionButton().click();
+			this.getters.askAssistantChat().should('be.visible');
+		},
+		openChatFromNdv: () => {
 			this.getters.askAssistantFloatingButton().click();
 			this.getters.askAssistantChat().should('be.visible');
 		},

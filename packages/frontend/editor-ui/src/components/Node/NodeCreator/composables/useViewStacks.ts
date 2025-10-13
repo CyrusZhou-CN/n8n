@@ -61,6 +61,8 @@ import { useUIStore } from '@/stores/ui.store';
 import { type NodeIconSource } from '@/utils/nodeIcon';
 import { getThemedValue } from '@/utils/nodeTypesUtils';
 
+import nodePopularity from 'virtual:node-popularity-data';
+
 export interface ViewStack {
 	uuid?: string;
 	title?: string;
@@ -87,6 +89,13 @@ export interface ViewStack {
 	sections?: string[] | NodeViewItemSection[];
 	communityNodeDetails?: CommunityNodeDetails;
 }
+
+const nodePopularityMap = Object.values(nodePopularity).reduce((acc, node) => {
+	return {
+		...acc,
+		[node.id]: node.popularity * 100, // Scale the popularity score
+	};
+}, {});
 
 export const useViewStacks = defineStore('nodeCreatorViewStacks', () => {
 	const nodeCreatorStore = useNodeCreatorStore();
@@ -121,7 +130,11 @@ export const useViewStacks = defineStore('nodeCreatorViewStacks', () => {
 				searchBase = filterOutAiNodes(searchBase);
 			}
 
-			const searchResults = extendItemsWithUUID(searchNodes(stack.search || '', searchBase));
+			const searchResults = extendItemsWithUUID(
+				searchNodes(stack.search || '', searchBase, {
+					popularity: nodePopularityMap,
+				}),
+			);
 
 			const groupedNodes = groupIfAiNodes(searchResults, stack.title, false) ?? searchResults;
 			// Set the active index to the second item if there's a section
@@ -181,8 +194,11 @@ export const useViewStacks = defineStore('nodeCreatorViewStacks', () => {
 		const filteredNodes = isAiRootView(stack) ? allNodes : filterOutAiNodes(allNodes);
 
 		let globalSearchResult: INodeCreateElement[] = extendItemsWithUUID(
-			searchNodes(stack.search || '', filteredNodes),
+			searchNodes(stack.search || '', filteredNodes, {
+				popularity: nodePopularityMap,
+			}),
 		);
+
 		if (isAiRootView(stack)) {
 			globalSearchResult = groupIfAiNodes(globalSearchResult, stack.title, false);
 		}
@@ -241,8 +257,12 @@ export const useViewStacks = defineStore('nodeCreatorViewStacks', () => {
 	) {
 		const aiNodes = items.filter((node): node is NodeCreateElement => isAINode(node));
 		const canvasHasAINodes = useCanvasStore().aiNodes.length > 0;
+		const isVectorStoresCategory = stackCategory === AI_CATEGORY_VECTOR_STORES;
 
-		if (aiNodes.length > 0 && (canvasHasAINodes || isAiRootView(getLastActiveStack()))) {
+		if (
+			aiNodes.length > 0 &&
+			(canvasHasAINodes || isAiRootView(getLastActiveStack()) || isVectorStoresCategory)
+		) {
 			const sectionsMap = new Map<string, NodeViewItemSection>();
 			const aiRootNodes = filterAiRootNodes(aiNodes);
 			const aiSubNodes = difference(aiNodes, aiRootNodes);
@@ -372,6 +392,9 @@ export const useViewStacks = defineStore('nodeCreatorViewStacks', () => {
 					//       but then errors once it got selected by the user.
 					if (displayNode && filter?.nodes?.length) {
 						return filter.nodes.includes(i.key);
+					}
+					if (displayNode && filter?.excludedNodes?.length) {
+						return !filter.excludedNodes.includes(i.key);
 					}
 
 					return displayNode;

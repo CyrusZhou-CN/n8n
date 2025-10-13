@@ -5,6 +5,7 @@ import type {
 	IUpdateInformation,
 	ActionCreateElement,
 	NodeCreateElement,
+	NodeTypeSelectedPayload,
 } from '@/Interface';
 import {
 	HTTP_REQUEST_NODE_TYPE,
@@ -23,18 +24,20 @@ import { useViewStacks } from '../composables/useViewStacks';
 
 import ItemsRenderer from '../Renderers/ItemsRenderer.vue';
 import CategorizedItemsRenderer from '../Renderers/CategorizedItemsRenderer.vue';
-import { type IDataObject } from 'n8n-workflow';
+import type { IDataObject } from 'n8n-workflow';
 import { useTelemetry } from '@/composables/useTelemetry';
 import { useI18n } from '@n8n/i18n';
 import { useNodeCreatorStore } from '@/stores/nodeCreator.store';
 import OrderSwitcher from './../OrderSwitcher.vue';
-import { isNodePreviewKey } from '../utils';
+import { getActiveViewCallouts, isNodePreviewKey } from '../utils';
 
 import CommunityNodeInfo from '../Panel/CommunityNodeInfo.vue';
 import CommunityNodeFooter from '../Panel/CommunityNodeFooter.vue';
+import { useCalloutHelpers } from '@/composables/useCalloutHelpers';
 
+import { N8nCallout, N8nInfoTip } from '@n8n/design-system';
 const emit = defineEmits<{
-	nodeTypeSelected: [value: [actionKey: string, nodeName: string] | [nodeName: string]];
+	nodeTypeSelected: [value: NodeTypeSelectedPayload[]];
 }>();
 const telemetry = useTelemetry();
 const i18n = useI18n();
@@ -45,12 +48,14 @@ const { registerKeyHook } = useKeyboardNavigation();
 const {
 	setAddedNodeActionParameters,
 	getActionData,
+	actionDataToNodeTypeSelectedPayload,
 	getPlaceholderTriggerActions,
 	parseCategoryActions,
 	actionsCategoryLocales,
 } = useActions();
 
 const nodeCreatorStore = useNodeCreatorStore();
+const calloutHelpers = useCalloutHelpers();
 
 // We only inject labels if search is empty
 const parsedTriggerActions = computed(() =>
@@ -157,6 +162,15 @@ function onKeySelect(activeItemId: string) {
 }
 
 function onSelected(actionCreateElement: INodeCreateElement) {
+	if (actionCreateElement.type === 'openTemplate') {
+		calloutHelpers.openSampleWorkflowTemplate(actionCreateElement.properties.templateId, {
+			telemetry: {
+				source: 'nodeCreator',
+				section: useViewStacks().activeViewStack.title,
+			},
+		});
+	}
+
 	if (actionCreateElement.type !== 'action') return;
 
 	const actionData = getActionData(actionCreateElement.properties);
@@ -166,17 +180,18 @@ function onSelected(actionCreateElement: INodeCreateElement) {
 
 	if (isPlaceholderTriggerAction && isTriggerRootView.value) {
 		const actionNode = actions.value[0]?.key;
-		if (actionNode) emit('nodeTypeSelected', [actionData.key as string, actionNode]);
+		if (actionNode) emit('nodeTypeSelected', [{ type: actionData.key }, { type: actionNode }]);
 	} else if (
 		actionData?.key === OPEN_AI_NODE_TYPE &&
 		(actionData?.value as IDataObject)?.resource === 'assistant' &&
 		(actionData?.value as IDataObject)?.operation === 'message'
 	) {
-		emit('nodeTypeSelected', [OPEN_AI_NODE_MESSAGE_ASSISTANT_TYPE]);
+		emit('nodeTypeSelected', [{ type: OPEN_AI_NODE_MESSAGE_ASSISTANT_TYPE }]);
 	} else if (isNodePreviewKey(actionData?.key)) {
 		return;
 	} else {
-		emit('nodeTypeSelected', [actionData.key as string]);
+		const payload = actionDataToNodeTypeSelectedPayload(actionData);
+		emit('nodeTypeSelected', [payload]);
 	}
 
 	if (telemetry) setAddedNodeActionParameters(actionData, telemetry, rootView.value);
@@ -217,7 +232,7 @@ function addHttpNode() {
 		},
 	} as IUpdateInformation;
 
-	emit('nodeTypeSelected', [HTTP_REQUEST_NODE_TYPE]);
+	emit('nodeTypeSelected', [{ type: HTTP_REQUEST_NODE_TYPE }]);
 	if (telemetry) setAddedNodeActionParameters(updateData);
 
 	const app_identifier = actions.value[0]?.key;
@@ -231,6 +246,14 @@ function addHttpNode() {
 onMounted(() => {
 	trackActionsView();
 });
+
+const callouts = computed<INodeCreateElement[]>(() =>
+	getActiveViewCallouts(
+		useViewStacks().activeViewStack.title,
+		calloutHelpers.isPreBuiltAgentsCalloutVisible.value,
+		calloutHelpers.getPreBuiltAgentNodeCreatorItems(),
+	),
+);
 </script>
 
 <template>
@@ -240,6 +263,8 @@ onMounted(() => {
 			[$style.containerPaddingBottom]: !communityNodeDetails,
 		}"
 	>
+		<ItemsRenderer :elements="callouts" :class="$style.items" @selected="onSelected" />
+
 		<CommunityNodeInfo v-if="communityNodeDetails" />
 		<OrderSwitcher v-if="rootView" :root-view="rootView">
 			<template v-if="shouldShowTriggers" #triggers>
@@ -256,7 +281,7 @@ onMounted(() => {
 				>
 					<!-- Empty state -->
 					<template v-if="hasNoTriggerActions" #empty>
-						<n8n-callout
+						<N8nCallout
 							v-if="hasNoTriggerActions"
 							theme="info"
 							iconless
@@ -270,7 +295,7 @@ onMounted(() => {
 									})
 								"
 							/>
-						</n8n-callout>
+						</N8nCallout>
 						<ItemsRenderer :elements="placeholderTriggerActions" @selected="onSelected" />
 					</template>
 					<template v-else #empty>
@@ -292,7 +317,7 @@ onMounted(() => {
 					:expanded="!isTriggerRootView || parsedTriggerActions.length === 0"
 					@selected="onSelected"
 				>
-					<n8n-callout
+					<N8nCallout
 						v-if="!userActivated && isTriggerRootView"
 						theme="info"
 						iconless
@@ -300,10 +325,10 @@ onMounted(() => {
 						data-test-id="actions-panel-activation-callout"
 					>
 						<span v-n8n-html="i18n.baseText('nodeCreator.actionsCallout.triggersStartWorkflow')" />
-					</n8n-callout>
+					</N8nCallout>
 					<!-- Empty state -->
 					<template #empty>
-						<n8n-info-tip v-if="!search" theme="info" type="note" :class="$style.actionsEmpty">
+						<N8nInfoTip v-if="!search" theme="info" type="note" :class="$style.actionsEmpty">
 							<span
 								v-n8n-html="
 									i18n.baseText('nodeCreator.actionsCallout.noActionItems', {
@@ -311,7 +336,7 @@ onMounted(() => {
 									})
 								"
 							/>
-						</n8n-info-tip>
+						</N8nInfoTip>
 						<p
 							v-else
 							v-n8n-html="i18n.baseText('nodeCreator.actionsCategory.noMatchingActions')"
@@ -334,8 +359,8 @@ onMounted(() => {
 			/>
 		</div>
 		<CommunityNodeFooter
-			:class="$style.communityNodeFooter"
 			v-if="communityNodeDetails"
+			:class="$style.communityNodeFooter"
 			:package-name="communityNodeDetails.packageName"
 			:show-manage="communityNodeDetails.installed && isInstanceOwner"
 		/>
@@ -350,7 +375,7 @@ onMounted(() => {
 }
 
 .containerPaddingBottom {
-	padding-bottom: var(--spacing-3xl);
+	padding-bottom: var(--spacing--3xl);
 }
 
 .communityNodeFooter {
@@ -359,31 +384,31 @@ onMounted(() => {
 
 .resetSearch {
 	cursor: pointer;
-	line-height: var(--font-line-height-regular);
-	font-weight: var(--font-weight-regular);
-	font-size: var(--font-size-2xs);
-	padding: var(--spacing-2xs) var(--spacing-s) 0;
-	color: var(--color-text-base);
+	line-height: var(--line-height--md);
+	font-weight: var(--font-weight--regular);
+	font-size: var(--font-size--2xs);
+	padding: var(--spacing--2xs) var(--spacing--sm) 0;
+	color: var(--color--text);
 
 	i {
-		font-weight: var(--font-weight-bold);
+		font-weight: var(--font-weight--bold);
 		font-style: normal;
 		text-decoration: underline;
 	}
 }
 .actionsEmpty {
-	padding: var(--spacing-2xs) var(--spacing-xs) var(--spacing-s);
-	font-weight: var(--font-weight-regular);
+	padding: var(--spacing--2xs) var(--spacing--xs) var(--spacing--sm);
+	font-weight: var(--font-weight--regular);
 
 	strong {
-		font-weight: var(--font-weight-bold);
+		font-weight: var(--font-weight--bold);
 	}
 }
 .apiHint {
-	padding: 0 var(--spacing-s) var(--spacing-xl);
-	font-size: var(--font-size-2xs);
-	color: var(--color-text-base);
-	line-height: var(--font-line-height-regular);
+	padding: 0 var(--spacing--sm) var(--spacing--xl);
+	font-size: var(--font-size--2xs);
+	color: var(--color--text);
+	line-height: var(--line-height--md);
 	z-index: 1;
 }
 </style>

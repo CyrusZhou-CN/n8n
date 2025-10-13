@@ -122,6 +122,16 @@ MacOS:
 
 No additional packages required.
 
+#### actionlint (for GitHub Actions workflow development)
+
+If you plan to modify GitHub Actions workflow files (`.github/workflows/*.yml`), you'll need [actionlint](https://github.com/rhysd/actionlint) for workflow validation:
+
+**macOS (Homebrew):**
+```
+brew install actionlint
+```
+> **Note:** actionlint is only required if you're modifying workflow files. It runs automatically via git hooks when workflow files are changed.
+
 ### Actual n8n setup
 
 > **IMPORTANT**: All the steps below have to get executed at least once to get the development setup up and running!
@@ -180,22 +190,120 @@ While iterating on n8n modules code, you can run `pnpm dev`. It will then
 automatically build your code, restart the backend and refresh the frontend
 (editor-ui) on every change you make.
 
+### Basic Development Workflow
+
 1. Start n8n in development mode:
    ```
    pnpm dev
    ```
-1. Hack, hack, hack
-1. Check if everything still runs in production mode:
+2. Hack, hack, hack
+3. Check if everything still runs in production mode:
    ```
    pnpm build
    pnpm start
    ```
-1. Create tests
-1. Run all [tests](#test-suite):
+4. Create tests
+5. Run all [tests](#test-suite):
    ```
    pnpm test
    ```
-1. Commit code and [create a pull request](https://docs.github.com/en/github/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request-from-a-fork)
+6. Commit code and [create a pull request](https://docs.github.com/en/github/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request-from-a-fork)
+
+### Hot Reload for Nodes (N8N_DEV_RELOAD)
+
+When developing custom nodes or credentials, you can enable hot reload to automatically detect changes without restarting the server:
+
+```bash
+N8N_DEV_RELOAD=true pnpm dev
+```
+
+**Performance considerations:**
+- File watching adds overhead to your system, especially on slower machines
+- The watcher monitors potentially thousands of files, which can impact CPU and memory usage
+- On resource-constrained systems, consider developing without hot reload and manually restarting when needed
+
+### Selective Package Development
+
+Running all packages in development mode can be resource-intensive. For better performance, run only the packages relevant to your work:
+
+#### Available Filtered Commands
+
+- **Backend-only development:**
+  ```bash
+  pnpm dev:be
+  ```
+  Excludes frontend packages like editor-ui and design-system
+
+- **Frontend-only development:**
+  ```bash
+  pnpm dev:fe
+  ```
+  Runs the backend server and editor-ui development server
+
+- **AI/LangChain nodes development:**
+  ```bash
+  pnpm dev:ai
+  ```
+  Runs only essential packages for AI node development
+
+#### Custom Selective Development
+
+For even more focused development, you can run packages individually:
+
+**Example 1: Working on custom nodes**
+```bash
+# Terminal 1: Build and watch nodes package
+cd packages/nodes-base
+pnpm dev
+
+# Terminal 2: Run the CLI with hot reload
+cd packages/cli
+N8N_DEV_RELOAD=true pnpm dev
+```
+
+**Example 2: Pure frontend development**
+```bash
+# Terminal 1: Start the backend server (no watching)
+pnpm start
+
+# Terminal 2: Run frontend dev server
+cd packages/editor-ui
+pnpm dev
+```
+
+**Example 3: Working on a specific node package**
+```bash
+# Terminal 1: Watch your node package
+cd packages/nodes-base  # or your custom node package
+pnpm watch
+
+# Terminal 2: Run CLI with hot reload
+cd packages/cli
+N8N_DEV_RELOAD=true pnpm dev
+```
+
+### Performance Considerations
+
+The full development mode (`pnpm dev`) runs multiple processes in parallel:
+
+1. **TypeScript compilation** for each package
+2. **File watchers** monitoring source files
+3. **Nodemon** restarting the backend on changes
+4. **Vite dev server** for the frontend with HMR
+5. **Multiple build processes** for various packages
+
+**Performance impact:**
+- Can consume significant CPU and memory resources
+- File system watching creates overhead, especially on:
+  - Networked file systems
+  - Virtual machines with shared folders
+  - Systems with slower I/O performance
+- The more packages you run in dev mode, the more system resources are consumed
+
+**Recommendations for resource-constrained environments:**
+1. Use selective development commands based on your task
+2. Close unnecessary applications to free up resources
+3. Monitor system performance and adjust your development approach accordingly
 
 ---
 
@@ -230,7 +338,7 @@ Please address the requested changes or provide feedback within 14 days. If ther
 - **Naming Convention:**
   - Follow [n8n's PR Title Conventions](https://github.com/n8n-io/n8n/blob/master/.github/pull_request_title_conventions.md#L36).
 - **New Nodes:**
-  - PRs that introduce new nodes will be **auto-closed** unless they are explicitly requested by the n8n team and aligned with an agreed project scope. However, you can still explore [building your own nodes](https://docs.n8n.io/integrations/creating-nodes/) , as n8n offers the flexibility to create your own custom nodes.
+  - PRs that introduce new nodes will be **auto-closed** unless they are explicitly requested by the n8n team and aligned with an agreed project scope. However, you can still explore [building your own nodes](https://docs.n8n.io/integrations/creating-nodes/overview/), as n8n offers the flexibility to create your own custom nodes.
 - **Typo-Only PRs:**
   - Typos are not sufficient justification for a PR and will be rejected.
 
@@ -292,7 +400,7 @@ This triggers [another workflow](https://github.com/n8n-io/n8n/actions/workflows
 
 ## Create custom nodes
 
-Learn about [building nodes](https://docs.n8n.io/integrations/creating-nodes/) to create custom nodes for n8n. You can create community nodes and make them available using [npm](https://www.npmjs.com/).
+Learn about [building nodes](https://docs.n8n.io/integrations/creating-nodes/overview/) to create custom nodes for n8n. You can create community nodes and make them available using [npm](https://www.npmjs.com/).
 
 ## Extend documentation
 

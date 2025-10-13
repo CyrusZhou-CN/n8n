@@ -13,7 +13,7 @@ import ParameterInputFull from '@/components/ParameterInputFull.vue';
 import ParameterIssues from '@/components//ParameterIssues.vue';
 import ParameterOptions from '@/components//ParameterOptions.vue';
 import { computed } from 'vue';
-import { i18n as locale } from '@n8n/i18n';
+import { i18n as locale, useI18n } from '@n8n/i18n';
 import { useNDVStore } from '@/stores/ndv.store';
 import {
 	fieldCannotBeDeleted,
@@ -27,10 +27,9 @@ import {
 	N8nInputLabel,
 	N8nOption,
 	N8nSelect,
+	N8nText,
 	N8nTooltip,
 } from '@n8n/design-system';
-import { useI18n } from '@n8n/i18n';
-
 interface Props {
 	parameter: INodeProperties;
 	path: string;
@@ -319,10 +318,10 @@ defineExpose({
 								})
 							}}</span>
 						</template>
-						<N8nIcon icon="exclamation-triangle" size="small" color="warning" />
+						<N8nIcon icon="triangle-alert" size="small" color="warning" />
 					</N8nTooltip>
 					<N8nIconButton
-						icon="refresh"
+						icon="refresh-cw"
 						type="tertiary"
 						size="small"
 						:text="true"
@@ -358,7 +357,7 @@ defineExpose({
 		>
 			<div
 				v-if="resourceMapperMode === 'add' && field.required"
-				:class="['delete-option', 'mt-5xs', $style.parameterTooltipIcon]"
+				:class="['delete-option', 'mt-2xs', $style.parameterTooltipIcon]"
 			>
 				<N8nTooltip placement="top">
 					<template #content>
@@ -368,7 +367,7 @@ defineExpose({
 							})
 						}}</span>
 					</template>
-					<font-awesome-icon icon="question-circle" />
+					<N8nIcon icon="circle-help" />
 				</N8nTooltip>
 			</div>
 			<div
@@ -384,8 +383,8 @@ defineExpose({
 				<N8nIconButton
 					type="tertiary"
 					text
-					size="mini"
-					icon="trash"
+					size="small"
+					icon="trash-2"
 					:data-test-id="`remove-field-button-${getParsedFieldName(field.name)}`"
 					:title="
 						locale.baseText('resourceMapper.removeField', {
@@ -446,7 +445,7 @@ defineExpose({
 .parameterItem {
 	--delete-option-width: 22px;
 	display: flex;
-	padding: 0 0 0 var(--spacing-s);
+	padding: 0 0 0 var(--spacing--sm);
 
 	.parameterInput {
 		width: calc(100% - var(--delete-option-width));
@@ -459,29 +458,32 @@ defineExpose({
 	&.hasIssues {
 		.parameterIssues {
 			float: none;
-			padding-top: var(--spacing-xl);
+			padding-top: var(--spacing--xl);
 		}
 		input,
 		input:focus {
-			--input-border-color: var(--color-danger);
-			border-color: var(--color-danger);
+			--input-border-color: var(--color--danger);
+			border-color: var(--color--danger);
 		}
 	}
 }
 
 .parameterTooltipIcon {
-	color: var(--color-text-light) !important;
+	font-size: var(--font-size--2xs);
+	color: var(--color--text--tint-1) !important;
+	width: 26px; // match trash button size
+	text-align: center;
 }
 
 .addOption {
-	margin-top: var(--spacing-l);
-	padding: 0 0 0 var(--spacing-s);
+	margin-top: var(--spacing--lg);
+	padding: 0 0 0 var(--spacing--sm);
 }
 
 .staleDataWarning {
 	display: flex;
-	height: var(--spacing-m);
+	height: var(--spacing--md);
 	align-items: baseline;
-	gap: var(--spacing-5xs);
+	gap: var(--spacing--5xs);
 }
 </style>

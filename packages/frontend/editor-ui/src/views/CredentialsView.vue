@@ -1,13 +1,11 @@
 <script setup lang="ts">
 import CredentialCard from '@/components/CredentialCard.vue';
-import ResourcesListLayout, {
-	type BaseFilters,
-	type Resource,
-} from '@/components/layouts/ResourcesListLayout.vue';
-import ProjectHeader from '@/components/Projects/ProjectHeader.vue';
+import EmptySharedSectionActionBox from '@/features/folders/components/EmptySharedSectionActionBox.vue';
+import ResourcesListLayout from '@/components/layouts/ResourcesListLayout.vue';
+import type { BaseFilters, Resource, ICredentialTypeMap } from '@/Interface';
+import ProjectHeader from '@/features/projects/components/ProjectHeader.vue';
 import { useDocumentTitle } from '@/composables/useDocumentTitle';
-import { useI18n } from '@n8n/i18n';
-import { useProjectPages } from '@/composables/useProjectPages';
+import { useProjectPages } from '@/features/projects/composables/useProjectPages';
 import { useTelemetry } from '@/composables/useTelemetry';
 import {
 	CREDENTIAL_EDIT_MODAL_KEY,
@@ -17,26 +15,26 @@ import {
 } from '@/constants';
 import InsightsSummary from '@/features/insights/components/InsightsSummary.vue';
 import { useInsightsStore } from '@/features/insights/insights.store';
-import type { ICredentialTypeMap } from '@/Interface';
-import { getResourcePermissions } from '@/permissions';
+import { getResourcePermissions } from '@n8n/permissions';
 import { useCredentialsStore } from '@/stores/credentials.store';
-import useEnvironmentsStore from '@/stores/environments.ee.store';
-import { useExternalSecretsStore } from '@/stores/externalSecrets.ee.store';
+import useEnvironmentsStore from '@/features/environments.ee/environments.store';
+import { useExternalSecretsStore } from '@/features/externalSecrets/externalSecrets.ee.store';
 import { useNodeTypesStore } from '@/stores/nodeTypes.store';
-import { useProjectsStore } from '@/stores/projects.store';
+import { useProjectsStore } from '@/features/projects/projects.store';
 import { useSettingsStore } from '@/stores/settings.store';
-import { useSourceControlStore } from '@/stores/sourceControl.store';
+import { useSourceControlStore } from '@/features/sourceControl.ee/sourceControl.store';
 import { listenForModalChanges, useUIStore } from '@/stores/ui.store';
 import { useUsersStore } from '@/stores/users.store';
-import type { Project } from '@/types/projects.types';
+import type { Project } from '@/features/projects/projects.types';
 import { isCredentialsResource } from '@/utils/typeGuards';
-import { N8nCheckbox } from '@n8n/design-system';
+import { useI18n } from '@n8n/i18n';
 import pickBy from 'lodash/pickBy';
 import type { ICredentialType, ICredentialsDecrypted } from 'n8n-workflow';
 import { CREDENTIAL_EMPTY_VALUE } from 'n8n-workflow';
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter, type LocationQueryRaw } from 'vue-router';
 
+import { N8nActionBox, N8nCheckbox, N8nInputLabel, N8nOption, N8nSelect } from '@n8n/design-system';
 const props = defineProps<{
 	credentialId?: string;
 }>();
@@ -169,15 +167,26 @@ const maybeCreateCredential = () => {
 	}
 };
 
-const maybeEditCredential = () => {
+const maybeEditCredential = async () => {
 	if (!!props.credentialId && props.credentialId !== 'create') {
 		const credential = credentialsStore.getCredentialById(props.credentialId);
 		const credentialPermissions = getResourcePermissions(credential?.scopes).credential;
-		if (credential && (credentialPermissions.update || credentialPermissions.read)) {
-			uiStore.openExistingCredential(props.credentialId);
-		} else {
-			void router.replace({ name: VIEWS.HOMEPAGE });
+		if (!credential) {
+			return await router.replace({
+				name: VIEWS.ENTITY_NOT_FOUND,
+				params: { entityType: 'credential' },
+			});
 		}
+
+		if (credentialPermissions.update || credentialPermissions.read) {
+			uiStore.openExistingCredential(props.credentialId);
+			return;
+		}
+
+		return await router.replace({
+			name: VIEWS.ENTITY_UNAUTHORIZED,
+			params: { entityType: 'credential' },
+		});
 	}
 };
 
@@ -200,7 +209,7 @@ const initialize = async () => {
 
 	await Promise.all(loadPromises);
 	maybeCreateCredential();
-	maybeEditCredential();
+	await maybeEditCredential();
 	loading.value = false;
 };
 
@@ -225,7 +234,7 @@ watch(
 	() => props.credentialId,
 	() => {
 		maybeCreateCredential();
-		maybeEditCredential();
+		void maybeEditCredential();
 	},
 );
 
@@ -318,7 +327,7 @@ onMounted(() => {
 				:personal-project="personalProject"
 				resource-type="credentials"
 			/>
-			<n8n-action-box
+			<N8nActionBox
 				v-else
 				data-test-id="empty-resources-list"
 				emoji="👋"
@@ -346,7 +355,7 @@ onMounted(() => {
 							: i18n.baseText('credentials.empty.button.disabled.tooltip')
 					}}
 				</template>
-			</n8n-action-box>
+			</N8nActionBox>
 		</template>
 	</ResourcesListLayout>
 </template>

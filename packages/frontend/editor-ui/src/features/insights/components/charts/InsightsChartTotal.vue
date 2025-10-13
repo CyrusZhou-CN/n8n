@@ -12,7 +12,7 @@ const props = defineProps<ChartProps>();
 
 const i18n = useI18n();
 
-const colorPrimary = useCssVar('--color-primary', document.body);
+const colorPrimary = useCssVar('--color--primary', document.body);
 const chartOptions = computed(() =>
 	generateBarChartOptions({
 		plugins: {
@@ -53,7 +53,5 @@ const chartData = computed<ChartData<'bar'>>(() => {
 </script>
 
 <template>
-	<Bar :data="chartData" :options="chartOptions" />
+	<Bar data-test-id="insights-chart-total" :data="chartData" :options="chartOptions" />
 </template>
-
-<style lang="scss" module></style>

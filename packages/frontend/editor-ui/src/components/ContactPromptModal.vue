@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import type { IN8nPromptResponse, ModalKey } from '@/Interface';
+import type { N8nPromptResponse } from '@n8n/rest-api-client/api/prompts';
+import type { ModalKey } from '@/Interface';
 import { VALID_EMAIL_REGEX } from '@/constants';
 import Modal from '@/components/Modal.vue';
-import { useSettingsStore } from '@/stores/settings.store';
 import { useRootStore } from '@n8n/stores/useRootStore';
+import { useUsersStore } from '@/stores/users.store';
 import { createEventBus } from '@n8n/utils/event-bus';
 import { useToast } from '@/composables/useToast';
 import { useNpsSurveyStore } from '@/stores/npsSurvey.store';
 import { useTelemetry } from '@/composables/useTelemetry';
 
+import { N8nButton, N8nHeading, N8nInput, N8nText } from '@n8n/design-system';
 defineProps<{
 	modalName: ModalKey;
 }>();
@@ -19,7 +21,7 @@ const modalBus = createEventBus();
 
 const npsSurveyStore = useNpsSurveyStore();
 const rootStore = useRootStore();
-const settingsStore = useSettingsStore();
+const usersStore = useUsersStore();
 
 const toast = useToast();
 const telemetry = useTelemetry();
@@ -55,7 +57,7 @@ const closeDialog = () => {
 
 const send = async () => {
 	if (isEmailValid.value) {
-		const response = (await settingsStore.submitContactInfo(email.value)) as IN8nPromptResponse;
+		const response = (await usersStore.submitContactInfo(email.value)) as N8nPromptResponse;
 
 		if (response.updated) {
 			telemetry.track('User closed email modal', {
@@ -84,24 +86,24 @@ const send = async () => {
 		width="460px"
 	>
 		<template #header>
-			<n8n-heading tag="h2" size="xlarge" color="text-dark">{{ title }}</n8n-heading>
+			<N8nHeading tag="h2" size="xlarge" color="text-dark">{{ title }}</N8nHeading>
 		</template>
 		<template #content>
 			<div :class="$style.description">
-				<n8n-text size="medium" color="text-base">{{ description }}</n8n-text>
+				<N8nText size="medium" color="text-base">{{ description }}</N8nText>
 			</div>
 			<div @keyup.enter="send">
-				<n8n-input v-model="email" placeholder="Your email address" />
+				<N8nInput v-model="email" placeholder="Your email address" />
 			</div>
 			<div :class="$style.disclaimer">
-				<n8n-text size="small" color="text-base"
-					>David from our product team will get in touch personally</n8n-text
+				<N8nText size="small" color="text-base"
+					>David from our product team will get in touch personally</N8nText
 				>
 			</div>
 		</template>
 		<template #footer>
 			<div :class="$style.footer">
-				<n8n-button label="Send" float="right" :disabled="!isEmailValid" @click="send" />
+				<N8nButton label="Send" float="right" :disabled="!isEmailValid" @click="send" />
 			</div>
 		</template>
 	</Modal>
@@ -109,11 +111,11 @@ const send = async () => {
 
 <style lang="scss" module>
 .description {
-	margin-bottom: var(--spacing-s);
+	margin-bottom: var(--spacing--sm);
 }
 
 .disclaimer {
-	margin-top: var(--spacing-4xs);
+	margin-top: var(--spacing--4xs);
 }
 </style>
 

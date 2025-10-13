@@ -10,6 +10,12 @@ import { REGULAR_NODE_CREATOR_VIEW } from '@/constants';
 import type { NodeFilterType } from '@/Interface';
 import { createComponentRenderer } from '@/__tests__/render';
 
+vi.mock('vue-router', () => ({
+	useRoute: vi.fn(() => ({ query: {}, params: {} })),
+	useRouter: vi.fn(),
+	RouterLink: vi.fn(),
+}));
+
 function getWrapperComponent(setup: () => void) {
 	const wrapperComponent = defineComponent({
 		components: {
@@ -76,16 +82,17 @@ describe('NodesListPanel', () => {
 			await fireEvent.click(container.querySelector('.backButton')!);
 			await nextTick();
 
-			expect(screen.queryAllByTestId('item-iterator-item')).toHaveLength(8);
+			expect(screen.queryAllByTestId('item-iterator-item')).toHaveLength(9);
 		});
 
 		it('should render regular nodes', async () => {
-			const mockedNodes = [...Array(8).keys()].map((n) =>
-				mockSimplifiedNodeType({
-					name: `Node ${n}`,
-					displayName: `Node ${n}`,
-					group: ['input'],
-				}),
+			const mockedNodes = [...Array(8).keys()].map(
+				(n) =>
+					mockSimplifiedNodeType({
+						name: `Node ${n}`,
+						displayName: `Node ${n}`,
+						group: ['input'],
+					}) as INodeTypeDescription,
 			);
 
 			const wrapperComponent = defineComponent({
@@ -147,12 +154,13 @@ describe('NodesListPanel', () => {
 	});
 
 	describe('should search nodes', () => {
-		const mockedNodes = [...Array(8).keys()].map((n) =>
-			mockSimplifiedNodeType({
-				name: `Node ${n}`,
-				displayName: `Node ${n}`,
-				group: ['trigger'],
-			}),
+		const mockedNodes = [...Array(8).keys()].map(
+			(n) =>
+				mockSimplifiedNodeType({
+					name: `Node ${n}`,
+					displayName: `Node ${n}`,
+					group: ['trigger'],
+				}) as INodeTypeDescription,
 		);
 
 		const wrapperComponent = defineComponent({
@@ -210,7 +218,7 @@ describe('NodesListPanel', () => {
 					name: 'Ninth node',
 					displayName: 'Ninth node',
 					group: ['trigger'],
-				}),
+				}) as INodeTypeDescription,
 			);
 
 			await rerender({ nodeTypes: [...mockedNodes] });
@@ -243,7 +251,7 @@ describe('NodesListPanel', () => {
 			expect(screen.queryAllByTestId('item-iterator-item')).toHaveLength(0);
 			expect(screen.queryByText("We didn't make that... yet")).toBeInTheDocument();
 
-			await fireEvent.click(container.querySelector('.clear')!);
+			await fireEvent.click(container.querySelector('svg[data-icon=circle-x]')!);
 			await nextTick();
 			expect(screen.queryAllByTestId('item-iterator-item')).toHaveLength(9);
 		});

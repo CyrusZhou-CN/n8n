@@ -3,24 +3,32 @@ import { useClipboard } from '@/composables/useClipboard';
 import { useI18n } from '@n8n/i18n';
 import { useToast } from '@/composables/useToast';
 import { type ParsedAiContent } from '@/utils/aiUtils';
-import { N8nIconButton } from '@n8n/design-system';
 import { type IDataObject } from 'n8n-workflow';
 import VueMarkdown from 'vue-markdown-render';
 import hljs from 'highlight.js/lib/core';
+import { computed } from 'vue';
+import { createSearchHighlightPlugin } from '@/components/RunDataAi/utils';
+
+import { N8nIconButton } from '@n8n/design-system';
+import TextWithHighlights from '@/components/TextWithHighlights.vue';
 
 const {
 	content,
 	compact = false,
 	renderType,
+	search,
 } = defineProps<{
 	content: ParsedAiContent;
 	compact?: boolean;
+	search?: string;
 	renderType: 'rendered' | 'json';
 }>();
 
 const i18n = useI18n();
 const clipboard = useClipboard();
 const { showMessage } = useToast();
+
+const vueMarkdownPlugins = computed(() => [createSearchHighlightPlugin(search)]);
 
 function isJsonString(text: string) {
 	try {
@@ -39,7 +47,7 @@ const markdownOptions = {
 			} catch {}
 		}
 
-		return ''; // use external default escaping
+		return undefined; // use external default escaping
 	},
 };
 
@@ -108,17 +116,20 @@ function onCopyToClipboard(object: IDataObject | IDataObject[]) {
 					:source="jsonToMarkdown(parsedContent.data as JsonMarkdown)"
 					:class="$style.markdown"
 					:options="markdownOptions"
+					:plugins="vueMarkdownPlugins"
 				/>
 				<VueMarkdown
 					v-else-if="parsedContent.type === 'markdown'"
 					:source="parsedContent.data"
 					:class="$style.markdown"
 					:options="markdownOptions"
+					:plugins="vueMarkdownPlugins"
 				/>
-				<p
+				<TextWithHighlights
 					v-else-if="parsedContent.type === 'text'"
 					:class="$style.runText"
-					v-text="parsedContent.data"
+					:content="String(parsedContent.data)"
+					:search="search"
 				/>
 			</template>
 			<!-- We weren't able to parse text or raw switch -->
@@ -128,10 +139,14 @@ function onCopyToClipboard(object: IDataObject | IDataObject[]) {
 					:class="$style.copyToClipboard"
 					type="secondary"
 					:title="i18n.baseText('nodeErrorView.copyToClipboard')"
-					icon="copy"
+					icon="files"
 					@click="onCopyToClipboard(raw)"
 				/>
-				<VueMarkdown :source="jsonToMarkdown(raw as JsonMarkdown)" :class="$style.markdown" />
+				<VueMarkdown
+					:source="jsonToMarkdown(raw as JsonMarkdown)"
+					:class="$style.markdown"
+					:plugins="vueMarkdownPlugins"
+				/>
 			</div>
 		</div>
 	</div>
@@ -139,53 +154,57 @@ function onCopyToClipboard(object: IDataObject | IDataObject[]) {
 
 <style lang="scss" module>
 .runText {
-	line-height: var(--font-line-height-xloose);
+	line-height: var(--line-height--xl);
 	white-space: pre-line;
 }
 
 .markdown {
-	& {
+	white-space: pre-wrap;
+
+	h1 {
+		font-size: var(--font-size--lg);
+		line-height: var(--line-height--xl);
+	}
+
+	h2 {
+		font-size: var(--font-size--md);
+		line-height: var(--line-height--lg);
+	}
+
+	h3 {
+		font-size: var(--font-size--sm);
+		line-height: var(--line-height--md);
+	}
+
+	pre {
+		background: var(--chat--message--pre--background);
+		border-radius: var(--radius);
+		line-height: var(--line-height--xl);
+		padding: var(--spacing--sm);
+		font-size: var(--font-size--sm);
 		white-space: pre-wrap;
 
-		h1 {
-			font-size: var(--font-size-l);
-			line-height: var(--font-line-height-xloose);
+		.compact & {
+			padding: var(--spacing--3xs);
+			font-size: var(--font-size--xs);
 		}
+	}
 
-		h2 {
-			font-size: var(--font-size-m);
-			line-height: var(--font-line-height-loose);
-		}
-
-		h3 {
-			font-size: var(--font-size-s);
-			line-height: var(--font-line-height-regular);
-		}
-
-		pre {
-			background: var(--chat--message--pre--background);
-			border-radius: var(--border-radius-base);
-			line-height: var(--font-line-height-xloose);
-			padding: var(--spacing-s);
-			font-size: var(--font-size-s);
-			white-space: pre-wrap;
-
-			.compact & {
-				padding: var(--spacing-3xs);
-				font-size: var(--font-size-xs);
-			}
+	p {
+		.compact & {
+			line-height: var(--line-height--xl);
 		}
 	}
 }
 
 .copyToClipboard {
 	position: absolute;
-	right: var(--spacing-s);
-	top: var(--spacing-s);
+	right: var(--spacing--sm);
+	top: var(--spacing--sm);
 
 	.compact & {
-		right: var(--spacing-2xs);
-		top: var(--spacing-2xs);
+		right: var(--spacing--2xs);
+		top: var(--spacing--2xs);
 	}
 }
 
@@ -194,15 +213,15 @@ function onCopyToClipboard(object: IDataObject | IDataObject[]) {
 }
 
 .contentText {
-	padding-top: var(--spacing-s);
-	padding-left: var(--spacing-m);
-	padding-right: var(--spacing-m);
-	font-size: var(--font-size-s);
+	padding-top: var(--spacing--sm);
+	padding-left: var(--spacing--md);
+	padding-right: var(--spacing--md);
+	font-size: var(--font-size--sm);
 
 	.compact & {
 		padding-top: 0;
-		padding-inline: var(--spacing-2xs);
-		font-size: var(--font-size-xs);
+		padding-inline: var(--spacing--2xs);
+		font-size: var(--font-size--2xs);
 	}
 }
 </style>

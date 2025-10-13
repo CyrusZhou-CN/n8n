@@ -18,15 +18,8 @@ exports[`AskAssistantButton > renders button with unread messages correctly 1`] 
         <span
           class="text medium"
         >
-          Ask Assistant
+          n8n AI
         </span>
-      </div>
-      <div>
-        <div
-          class="beta"
-        >
-          beta
-        </div>
       </div>
     </div>
   </button>
@@ -80,15 +73,8 @@ exports[`AskAssistantButton > renders default button correctly 1`] = `
         <span
           class="text medium"
         >
-          Ask Assistant
+          n8n AI
         </span>
-      </div>
-      <div>
-        <div
-          class="beta"
-        >
-          beta
-        </div>
       </div>
     </div>
   </button>

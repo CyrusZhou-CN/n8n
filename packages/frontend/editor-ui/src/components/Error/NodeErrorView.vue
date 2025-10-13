@@ -1,10 +1,12 @@
 <script lang="ts" setup>
-import { useI18n } from '@n8n/i18n';
 import { computed } from 'vue';
+import { useRouter } from 'vue-router';
+import { useI18n } from '@n8n/i18n';
 import { useClipboard } from '@/composables/useClipboard';
 import { useToast } from '@/composables/useToast';
 import { useNodeTypesStore } from '@/stores/nodeTypes.store';
 import { useNDVStore } from '@/stores/ndv.store';
+import { useWorkflowsStore } from '@/stores/workflows.store';
 import { useRootStore } from '@n8n/stores/useRootStore';
 import type {
 	IDataObject,
@@ -15,16 +17,22 @@ import type {
 	NodeError,
 	NodeOperationError,
 } from 'n8n-workflow';
+import { isCommunityPackageName } from 'n8n-workflow';
 import { sanitizeHtml } from '@/utils/htmlUtils';
-import { MAX_DISPLAY_DATA_SIZE, NEW_ASSISTANT_SESSION_MODAL } from '@/constants';
+import { MAX_DISPLAY_DATA_SIZE, NEW_ASSISTANT_SESSION_MODAL, VIEWS } from '@/constants';
 import type { BaseTextKey } from '@n8n/i18n';
-import { useAssistantStore } from '@/stores/assistant.store';
-import type { ChatRequest } from '@/types/assistant.types';
-import InlineAskAssistantButton from '@n8n/design-system/components/InlineAskAssistantButton/InlineAskAssistantButton.vue';
+import { useChatPanelStore } from '@/features/assistant/chatPanel.store';
+import { useAssistantStore } from '@/features/assistant/assistant.store';
+import type { ChatRequest } from '@/features/assistant/assistant.types';
 import { useUIStore } from '@/stores/ui.store';
-import { isCommunityPackageName } from '@/utils/nodeTypesUtils';
-import { useAIAssistantHelpers } from '@/composables/useAIAssistantHelpers';
-import { N8nIconButton } from '@n8n/design-system';
+import { useAIAssistantHelpers } from '@/features/assistant/composables/useAIAssistantHelpers';
+import {
+	N8nInlineAskAssistantButton,
+	N8nButton,
+	N8nIcon,
+	N8nIconButton,
+	N8nTooltip,
+} from '@n8n/design-system';
 
 type Props = {
 	// TODO: .node can be undefined
@@ -34,6 +42,8 @@ type Props = {
 };
 
 const props = defineProps<Props>();
+
+const router = useRouter();
 const clipboard = useClipboard();
 const toast = useToast();
 const i18n = useI18n();
@@ -41,9 +51,14 @@ const assistantHelpers = useAIAssistantHelpers();
 
 const nodeTypesStore = useNodeTypesStore();
 const ndvStore = useNDVStore();
+const workflowsStore = useWorkflowsStore();
 const rootStore = useRootStore();
 const assistantStore = useAssistantStore();
+const chatPanelStore = useChatPanelStore();
 const uiStore = useUIStore();
+
+const workflowId = computed(() => workflowsStore.workflowId);
+const executionId = computed(() => workflowsStore.getWorkflowExecution?.id);
 
 const displayCause = computed(() => {
 	return JSON.stringify(props.error.cause ?? '').length < MAX_DISPLAY_DATA_SIZE;
@@ -206,7 +221,7 @@ function getErrorMessage(): string {
 
 	if (isSubNodeError.value) {
 		message = i18n.baseText('nodeErrorView.errorSubNode', {
-			interpolate: { node: props.error.node.name },
+			interpolate: { node: props.error.node?.name ?? '' },
 		});
 	} else if (
 		isNonEmptyString(props.error.message) &&
@@ -384,7 +399,32 @@ function nodeIsHidden() {
 }
 
 const onOpenErrorNodeDetailClick = () => {
-	ndvStore.activeNodeName = props.error.node.name;
+	if (!props.error.node) {
+		return;
+	}
+
+	if (
+		'workflowId' in props.error &&
+		workflowId.value &&
+		typeof props.error.workflowId === 'string' &&
+		workflowId.value !== props.error.workflowId &&
+		'executionId' in props.error &&
+		executionId.value &&
+		typeof props.error.executionId === 'string' &&
+		executionId.value !== props.error.executionId
+	) {
+		const link = router.resolve({
+			name: VIEWS.EXECUTION_PREVIEW,
+			params: {
+				name: props.error.workflowId,
+				executionId: props.error.executionId,
+				nodeId: props.error.node.id,
+			},
+		});
+		window.open(link.href, '_blank');
+	} else {
+		ndvStore.setActiveNodeName(props.error.node.name, 'other');
+	}
 };
 
 async function onAskAssistantClick() {
@@ -407,7 +447,7 @@ async function onAskAssistantClick() {
 		});
 		return;
 	}
-	await assistantStore.initErrorHelper(errorHelp);
+	await chatPanelStore.openWithErrorHelper(errorHelp);
 	assistantStore.trackUserOpenedAssistant({
 		source: 'error',
 		task: 'error',
@@ -432,7 +472,7 @@ async function onAskAssistantClick() {
 			></div>
 
 			<div v-if="isSubNodeError">
-				<n8n-button
+				<N8nButton
 					icon="arrow-right"
 					type="secondary"
 					:label="i18n.baseText('pushConnection.executionError.openNode')"
@@ -446,7 +486,7 @@ async function onAskAssistantClick() {
 				class="node-error-view__button"
 				data-test-id="node-error-view-ask-assistant-button"
 			>
-				<InlineAskAssistantButton :asked="assistantAlreadyAsked" @click="onAskAssistantClick" />
+				<N8nInlineAskAssistantButton :asked="assistantAlreadyAsked" @click="onAskAssistantClick" />
 			</div>
 		</div>
 
@@ -455,22 +495,22 @@ async function onAskAssistantClick() {
 				<p class="node-error-view__info-title">
 					{{ i18n.baseText('nodeErrorView.details.title') }}
 				</p>
-				<n8n-tooltip
+				<N8nTooltip
 					class="item"
 					:content="i18n.baseText('nodeErrorView.copyToClipboard.tooltip')"
 					placement="left"
 				>
 					<div class="copy-button">
 						<N8nIconButton
-							icon="copy"
+							icon="files"
 							type="secondary"
-							size="mini"
+							size="small"
 							:text="true"
 							transparent-background="transparent"
 							@click="copyErrorDetails"
 						/>
 					</div>
-				</n8n-tooltip>
+				</N8nTooltip>
 			</div>
 
 			<div class="node-error-view__info-content">
@@ -484,7 +524,7 @@ async function onAskAssistantClick() {
 					class="node-error-view__details"
 				>
 					<summary class="node-error-view__details-summary">
-						<font-awesome-icon class="node-error-view__details-icon" icon="angle-right" />
+						<N8nIcon class="node-error-view__details-icon" icon="chevron-right" />
 						{{
 							i18n.baseText('nodeErrorView.details.from', {
 								interpolate: { node: `${nodeDefaultName}` },
@@ -539,7 +579,7 @@ async function onAskAssistantClick() {
 
 				<details class="node-error-view__details">
 					<summary class="node-error-view__details-summary">
-						<font-awesome-icon class="node-error-view__details-icon" icon="angle-right" />
+						<N8nIcon class="node-error-view__details-icon" icon="chevron-right" />
 						{{ i18n.baseText('nodeErrorView.details.info') }}
 					</summary>
 					<div class="node-error-view__details-content">
@@ -656,29 +696,29 @@ async function onAskAssistantClick() {
 <style lang="scss">
 .node-error-view {
 	&__header {
-		margin: 0 auto var(--spacing-s) auto;
-		padding-bottom: var(--spacing-3xs);
-		background-color: var(--color-background-xlight);
-		border: 1px solid var(--color-foreground-base);
-		border-radius: var(--border-radius-large);
+		margin: 0 auto var(--spacing--sm) auto;
+		padding-bottom: var(--spacing--3xs);
+		background-color: var(--color--background--light-3);
+		border: 1px solid var(--color--foreground);
+		border-radius: var(--radius--lg);
 
 		.node-error-view_compact & {
-			margin: 0 auto var(--spacing-2xs) auto;
-			border-radius: var(--border-radius-base);
+			margin: 0 auto var(--spacing--2xs) auto;
+			border-radius: var(--radius);
 		}
 	}
 
 	&__header-title {
-		padding: var(--spacing-2xs) var(--spacing-s);
-		border-bottom: 1px solid var(--color-danger-tint-1);
-		font-size: var(--font-size-3xs);
-		font-weight: var(--font-weight-medium);
-		background-color: var(--color-danger-tint-2);
-		border-radius: var(--border-radius-large) var(--border-radius-large) 0 0;
-		color: var(--color-danger);
+		padding: var(--spacing--2xs) var(--spacing--sm);
+		border-bottom: 1px solid var(--color--danger--tint-3);
+		font-size: var(--font-size--3xs);
+		font-weight: var(--font-weight--medium);
+		background-color: var(--color--danger--tint-4);
+		border-radius: var(--radius--lg) var(--radius--lg) 0 0;
+		color: var(--color--danger);
 
 		.node-error-view_compact & {
-			border-radius: var(--border-radius-base);
+			border-radius: var(--radius);
 		}
 	}
 
@@ -686,60 +726,62 @@ async function onAskAssistantClick() {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		gap: var(--spacing-xs);
-		padding: var(--spacing-xs) var(--spacing-s) var(--spacing-3xs) var(--spacing-s);
-		color: var(--color-danger);
-		font-weight: var(--font-weight-medium);
-		font-size: var(--font-size-s);
+		gap: var(--spacing--xs);
+		padding: var(--spacing--xs) var(--spacing--sm) var(--spacing--3xs) var(--spacing--sm);
+		color: var(--color--danger);
+		font-weight: var(--font-weight--medium);
+		font-size: var(--font-size--sm);
 	}
 
 	&__header-description {
 		overflow: hidden;
-		padding: 0 var(--spacing-s) var(--spacing-3xs) var(--spacing-s);
-		font-size: var(--font-size-xs);
+		padding: 0 var(--spacing--sm) var(--spacing--3xs) var(--spacing--sm);
+		font-size: var(--font-size--xs);
 
 		ul {
-			padding: var(--spacing-s) 0;
-			padding-left: var(--spacing-l);
+			padding: var(--spacing--sm) 0;
+			padding-left: var(--spacing--lg);
 		}
 
 		code {
-			font-size: var(--font-size-xs);
-			color: var(--color-text-base);
-			background: var(--color-background-base);
-			padding: var(--spacing-5xs);
-			border-radius: var(--border-radius-base);
+			font-size: var(--font-size--xs);
+			color: var(--color--text);
+			background: var(--color--background);
+			padding: var(--spacing--5xs);
+			border-radius: var(--radius);
 		}
 	}
 
 	&__button {
-		margin-left: var(--spacing-s);
-		margin-bottom: var(--spacing-xs);
+		margin-left: var(--spacing--sm);
+		margin-bottom: var(--spacing--xs);
+		margin-top: var(--spacing--xs);
 		flex-direction: row-reverse;
+
 		span {
-			margin-right: var(--spacing-5xs);
-			margin-left: var(--spacing-5xs);
+			margin-right: var(--spacing--5xs);
+			margin-left: var(--spacing--5xs);
 		}
 	}
 
 	&__debugging {
-		font-size: var(--font-size-s);
+		font-size: var(--font-size--sm);
 
 		ul,
 		ol,
 		dl {
-			padding-left: var(--spacing-s);
-			margin-top: var(--spacing-2xs);
-			margin-bottom: var(--spacing-2xs);
+			padding-left: var(--spacing--sm);
+			margin-top: var(--spacing--2xs);
+			margin-bottom: var(--spacing--2xs);
 		}
 
 		pre {
-			padding: var(--spacing-s);
+			padding: var(--spacing--sm);
 			width: 100%;
 			overflow: auto;
-			background: var(--color-background-light);
+			background: var(--color--background--light-2);
 			code {
-				font-size: var(--font-size-s);
+				font-size: var(--font-size--sm);
 			}
 		}
 	}
@@ -747,30 +789,31 @@ async function onAskAssistantClick() {
 	&__feedback-toolbar {
 		display: flex;
 		align-items: center;
-		margin-top: var(--spacing-s);
-		padding-top: var(--spacing-3xs);
-		border-top: 1px solid var(--color-foreground-base);
+		margin-top: var(--spacing--sm);
+		padding-top: var(--spacing--3xs);
+		border-top: 1px solid var(--color--foreground);
 	}
 
 	&__feedback-button {
-		width: var(--spacing-2xl);
-		height: var(--spacing-2xl);
+		width: var(--spacing--2xl);
+		height: var(--spacing--2xl);
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
 		cursor: pointer;
+
 		&:hover {
-			color: var(--color-primary);
+			color: var(--color--primary);
 		}
 	}
 
 	&__info {
 		margin: 0 auto;
-		border: 1px solid var(--color-foreground-base);
-		border-radius: var(--border-radius-large);
+		border: 1px solid var(--color--foreground);
+		border-radius: var(--radius--lg);
 
 		.node-error-view_compact & {
-			border-radius: var(--border-radius-base);
+			border-radius: var(--radius);
 		}
 	}
 
@@ -778,22 +821,22 @@ async function onAskAssistantClick() {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: var(--spacing-3xs) var(--spacing-3xs) var(--spacing-3xs) var(--spacing-s);
-		border-bottom: 1px solid var(--color-foreground-base);
+		padding: var(--spacing--3xs) var(--spacing--3xs) var(--spacing--3xs) var(--spacing--sm);
+		border-bottom: 1px solid var(--color--foreground);
 	}
 
 	&__info-title {
-		font-size: var(--font-size-2xs);
-		font-weight: var(--font-weight-bold);
-		color: var(--color-text-dark);
+		font-size: var(--font-size--2xs);
+		font-weight: var(--font-weight--bold);
+		color: var(--color--text--shade-1);
 	}
 
 	&__info-content {
-		padding: var(--spacing-2xs) var(--spacing-s);
+		padding: var(--spacing--2xs) var(--spacing--sm);
 	}
 
 	&__details:not(:last-child) {
-		margin-bottom: var(--spacing-2xs);
+		margin-bottom: var(--spacing--2xs);
 	}
 
 	&__details[open] {
@@ -806,29 +849,29 @@ async function onAskAssistantClick() {
 	}
 
 	&__details-summary {
-		padding: var(--spacing-5xs) 0;
-		font-size: var(--font-size-2xs);
-		color: var(--color-text-dark);
+		padding: var(--spacing--5xs) 0;
+		font-size: var(--font-size--2xs);
+		color: var(--color--text--shade-1);
 		cursor: pointer;
 		list-style-type: none;
 		outline: none;
 	}
 
 	&__details-content {
-		padding: var(--spacing-2xs) var(--spacing-s);
+		padding: var(--spacing--2xs) var(--spacing--sm);
 	}
 
 	&__details-row {
 		display: flex;
-		padding: var(--spacing-4xs) 0;
+		padding: var(--spacing--4xs) 0;
 	}
 
 	&__details-row:not(:first-child) {
-		border-top: 1px solid var(--color-foreground-base);
+		border-top: 1px solid var(--color--foreground);
 	}
 
 	&__details-icon {
-		margin-right: var(--spacing-xs);
+		margin-right: var(--spacing--xs);
 	}
 
 	&__details-label {
@@ -836,7 +879,7 @@ async function onAskAssistantClick() {
 		flex-shrink: 0;
 		width: 120px;
 		color: var(--color-text);
-		font-size: var(--font-size-2xs);
+		font-size: var(--font-size--2xs);
 	}
 
 	&__details-value {
@@ -844,7 +887,7 @@ async function onAskAssistantClick() {
 		overflow: hidden;
 		margin-right: auto;
 		color: var(--color-text);
-		font-size: var(--font-size-2xs);
+		font-size: var(--font-size--2xs);
 		word-wrap: break-word;
 
 		code {
@@ -853,9 +896,5 @@ async function onAskAssistantClick() {
 			word-wrap: break-word;
 		}
 	}
-}
-
-.node-error-view__button {
-	margin-top: var(--spacing-xs);
 }
 </style>

@@ -1,24 +1,33 @@
+import type { NodeTypes } from '@/node-types';
+import { mockInstance } from '@n8n/backend-test-utils';
 import type { GlobalConfig } from '@n8n/config';
-import type { CredentialsEntity } from '@n8n/db';
-import type { WorkflowEntity } from '@n8n/db';
-import type { IWorkflowDb } from '@n8n/db';
-import type { CredentialsRepository } from '@n8n/db';
-import type { ProjectRelationRepository } from '@n8n/db';
-import type { SharedWorkflowRepository } from '@n8n/db';
-import type { WorkflowRepository } from '@n8n/db';
+import {
+	type CredentialsEntity,
+	type CredentialsRepository,
+	type IWorkflowDb,
+	type ProjectRelationRepository,
+	type SharedWorkflowRepository,
+	type WorkflowEntity,
+	type WorkflowRepository,
+	GLOBAL_OWNER_ROLE,
+} from '@n8n/db';
 import { mock } from 'jest-mock-extended';
 import { type BinaryDataConfig, InstanceSettings } from 'n8n-core';
-import type { INode, INodesGraphResult } from 'n8n-workflow';
-import { NodeApiError, TelemetryHelpers, type IRun, type IWorkflowBase } from 'n8n-workflow';
+import {
+	type INode,
+	type INodesGraphResult,
+	type IRun,
+	type IWorkflowBase,
+	NodeApiError,
+	TelemetryHelpers,
+} from 'n8n-workflow';
 
 import { N8N_VERSION } from '@/constants';
 import { EventService } from '@/events/event.service';
 import type { RelayEventMap } from '@/events/maps/relay.event-map';
 import { TelemetryEventRelay } from '@/events/relays/telemetry.event-relay';
 import type { License } from '@/license';
-import type { NodeTypes } from '@/node-types';
 import type { Telemetry } from '@/telemetry';
-import { mockInstance } from '@test/mocking';
 
 const flushPromises = async () => await new Promise((resolve) => setImmediate(resolve));
 
@@ -26,6 +35,9 @@ describe('TelemetryEventRelay', () => {
 	const telemetry = mock<Telemetry>();
 	const license = mock<License>();
 	const globalConfig = mock<GlobalConfig>({
+		deployment: {
+			type: 'default',
+		},
 		userManagement: {
 			emails: {
 				mode: 'smtp',
@@ -202,6 +214,7 @@ describe('TelemetryEventRelay', () => {
 				readOnlyInstance: false,
 				repoType: 'github',
 				connected: true,
+				connectionType: 'ssh',
 			};
 
 			eventService.emit('source-control-settings-updated', event);
@@ -211,6 +224,7 @@ describe('TelemetryEventRelay', () => {
 				read_only_instance: false,
 				repo_type: 'github',
 				connected: true,
+				connection_type: 'ssh',
 			});
 		});
 
@@ -370,7 +384,7 @@ describe('TelemetryEventRelay', () => {
 					email: 'user@example.com',
 					firstName: 'John',
 					lastName: 'Doe',
-					role: 'global:owner',
+					role: { slug: GLOBAL_OWNER_ROLE.slug },
 				},
 				publicApi: true,
 			};
@@ -390,7 +404,7 @@ describe('TelemetryEventRelay', () => {
 					email: 'user@example.com',
 					firstName: 'John',
 					lastName: 'Doe',
-					role: 'global:owner',
+					role: { slug: GLOBAL_OWNER_ROLE.slug },
 				},
 				publicApi: true,
 			};
@@ -412,7 +426,7 @@ describe('TelemetryEventRelay', () => {
 					email: 'user@example.com',
 					firstName: 'John',
 					lastName: 'Doe',
-					role: 'global:owner',
+					role: { slug: GLOBAL_OWNER_ROLE.slug },
 				},
 				inputString: 'n8n-nodes-package',
 				packageName: 'n8n-nodes-package',
@@ -445,7 +459,7 @@ describe('TelemetryEventRelay', () => {
 					email: 'user@example.com',
 					firstName: 'John',
 					lastName: 'Doe',
-					role: 'global:owner',
+					role: { slug: GLOBAL_OWNER_ROLE.slug },
 				},
 				packageName: 'n8n-nodes-package',
 				packageVersionCurrent: '1.0.0',
@@ -475,7 +489,7 @@ describe('TelemetryEventRelay', () => {
 					email: 'user@example.com',
 					firstName: 'John',
 					lastName: 'Doe',
-					role: 'global:owner',
+					role: { slug: GLOBAL_OWNER_ROLE.slug },
 				},
 				packageName: 'n8n-nodes-package',
 				packageVersion: '1.0.0',
@@ -505,7 +519,7 @@ describe('TelemetryEventRelay', () => {
 					email: 'user@example.com',
 					firstName: 'John',
 					lastName: 'Doe',
-					role: 'global:owner',
+					role: { slug: GLOBAL_OWNER_ROLE.slug },
 				},
 				credentialType: 'github',
 				credentialId: 'cred123',
@@ -532,7 +546,7 @@ describe('TelemetryEventRelay', () => {
 					email: 'user@example.com',
 					firstName: 'John',
 					lastName: 'Doe',
-					role: 'global:owner',
+					role: { slug: GLOBAL_OWNER_ROLE.slug },
 				},
 				credentialType: 'github',
 				credentialId: 'cred123',
@@ -560,7 +574,7 @@ describe('TelemetryEventRelay', () => {
 					email: 'user@example.com',
 					firstName: 'John',
 					lastName: 'Doe',
-					role: 'global:owner',
+					role: { slug: GLOBAL_OWNER_ROLE.slug },
 				},
 				credentialId: 'cred123',
 				credentialType: 'github',
@@ -582,7 +596,7 @@ describe('TelemetryEventRelay', () => {
 					email: 'user@example.com',
 					firstName: 'John',
 					lastName: 'Doe',
-					role: 'global:owner',
+					role: { slug: GLOBAL_OWNER_ROLE.slug },
 				},
 				credentialId: 'cred123',
 				credentialType: 'github',
@@ -678,7 +692,7 @@ describe('TelemetryEventRelay', () => {
 					email: 'user@example.com',
 					firstName: 'John',
 					lastName: 'Doe',
-					role: 'global:owner',
+					role: { slug: GLOBAL_OWNER_ROLE.slug },
 				},
 				workflow: mock<IWorkflowBase>({ id: 'workflow123', name: 'Test Workflow', nodes: [] }),
 				publicApi: false,
@@ -707,7 +721,7 @@ describe('TelemetryEventRelay', () => {
 					email: 'user@example.com',
 					firstName: 'John',
 					lastName: 'Doe',
-					role: 'global:owner',
+					role: { slug: GLOBAL_OWNER_ROLE.slug },
 				},
 				workflowId: 'workflow123',
 				publicApi: false,
@@ -729,7 +743,7 @@ describe('TelemetryEventRelay', () => {
 					email: 'user@example.com',
 					firstName: 'John',
 					lastName: 'Doe',
-					role: 'global:owner',
+					role: { slug: GLOBAL_OWNER_ROLE.slug },
 				},
 				workflowId: 'workflow123',
 				publicApi: false,
@@ -751,7 +765,7 @@ describe('TelemetryEventRelay', () => {
 					email: 'user@example.com',
 					firstName: 'John',
 					lastName: 'Doe',
-					role: 'global:owner',
+					role: { slug: GLOBAL_OWNER_ROLE.slug },
 				},
 				workflowId: 'workflow123',
 				publicApi: false,
@@ -797,7 +811,7 @@ describe('TelemetryEventRelay', () => {
 					email: 'user@example.com',
 					firstName: 'John',
 					lastName: 'Doe',
-					role: 'global:owner',
+					role: { slug: GLOBAL_OWNER_ROLE.slug },
 				},
 				workflow: mock<IWorkflowDb>({ id: 'workflow123', name: 'Test Workflow', nodes: [] }),
 				publicApi: false,
@@ -845,7 +859,7 @@ describe('TelemetryEventRelay', () => {
 					email: 'user@example.com',
 					firstName: 'John',
 					lastName: 'Doe',
-					role: 'global:owner',
+					role: { slug: GLOBAL_OWNER_ROLE.slug },
 				},
 				fieldsChanged: ['firstName', 'lastName'],
 			};
@@ -865,7 +879,7 @@ describe('TelemetryEventRelay', () => {
 					email: 'user@example.com',
 					firstName: 'John',
 					lastName: 'Doe',
-					role: 'global:owner',
+					role: { slug: GLOBAL_OWNER_ROLE.slug },
 				},
 				publicApi: false,
 				targetUserOldStatus: 'active',
@@ -893,7 +907,7 @@ describe('TelemetryEventRelay', () => {
 					email: 'user@example.com',
 					firstName: 'John',
 					lastName: 'Doe',
-					role: 'global:owner',
+					role: { slug: GLOBAL_OWNER_ROLE.slug },
 				},
 				targetUserId: ['user456'],
 				publicApi: false,
@@ -919,7 +933,7 @@ describe('TelemetryEventRelay', () => {
 					email: 'user@example.com',
 					firstName: 'John',
 					lastName: 'Doe',
-					role: 'global:owner',
+					role: { slug: GLOBAL_OWNER_ROLE.slug },
 				},
 				userType: 'email',
 				wasDisabledLdapUser: false,
@@ -1137,7 +1151,7 @@ describe('TelemetryEventRelay', () => {
 					email: 'user@example.com',
 					firstName: 'John',
 					lastName: 'Doe',
-					role: 'global:owner',
+					role: { slug: GLOBAL_OWNER_ROLE.slug },
 				},
 				messageType: 'New user invite',
 				publicApi: false,

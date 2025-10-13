@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { i18n } from '@n8n/i18n';
 
-import { N8nText, N8nLink } from '@n8n/design-system';
-
+import { N8nIcon, N8nLink, N8nText } from '@n8n/design-system';
 export interface Props {
 	packageName: string;
 }
@@ -18,14 +17,14 @@ const openCommunityNodeDocsPage = () => {
 <template>
 	<N8nLink
 		theme="text"
-		@click="openCommunityNodeDocsPage"
 		:class="$style.container"
 		:title="i18n.baseText('communityNodesDocsLink.link.title')"
+		@click="openCommunityNodeDocsPage"
 	>
 		<N8nText size="small" bold style="margin-right: 5px">
 			{{ i18n.baseText('communityNodesDocsLink.title') }}
 		</N8nText>
-		<FontAwesomeIcon icon="external-link-alt" />
+		<N8nIcon icon="external-link" />
 	</N8nLink>
 </template>
 
@@ -34,6 +33,6 @@ const openCommunityNodeDocsPage = () => {
 	display: flex;
 	align-items: center;
 	margin-left: auto;
-	padding-bottom: var(--spacing-5xs);
+	padding-bottom: var(--spacing--5xs);
 }
 </style>

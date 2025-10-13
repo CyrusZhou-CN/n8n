@@ -12,32 +12,50 @@ import NodeIcon from '@/components/NodeIcon.vue';
 import { useI18n } from '@n8n/i18n';
 import { useNodeTypesStore } from '@/stores/nodeTypes.store';
 import LogsViewNodeName from '@/features/logs/components/LogsViewNodeName.vue';
-import { N8nButton, N8nResizeWrapper } from '@n8n/design-system';
 import { computed, useTemplateRef } from 'vue';
 import KeyboardShortcutTooltip from '@/components/KeyboardShortcutTooltip.vue';
-import { getSubtreeTotalConsumedTokens } from '@/features/logs/logs.utils';
+import { getSubtreeTotalConsumedTokens, isPlaceholderLog } from '@/features/logs/logs.utils';
 import { LOG_DETAILS_PANEL_STATE } from '@/features/logs/logs.constants';
+import { useNDVStore } from '@/stores/ndv.store';
+import { useExperimentalNdvStore } from '@/features/canvas/experimental/experimentalNdv.store';
 
+import { N8nButton, N8nResizeWrapper, N8nText } from '@n8n/design-system';
 const MIN_IO_PANEL_WIDTH = 200;
 
-const { isOpen, logEntry, window, latestInfo, panels } = defineProps<{
+const {
+	isOpen,
+	logEntry,
+	window,
+	latestInfo,
+	panels,
+	collapsingInputTableColumnName,
+	collapsingOutputTableColumnName,
+	isHeaderClickable,
+} = defineProps<{
 	isOpen: boolean;
 	logEntry: LogEntry;
 	window?: Window;
 	latestInfo?: LatestNodeInfo;
 	panels: LogDetailsPanelState;
+	collapsingInputTableColumnName: string | null;
+	collapsingOutputTableColumnName: string | null;
+	isHeaderClickable: boolean;
 }>();
 
 const emit = defineEmits<{
 	clickHeader: [];
 	toggleInputOpen: [] | [boolean];
 	toggleOutputOpen: [] | [boolean];
+	collapsingInputTableColumnChanged: [columnName: string | null];
+	collapsingOutputTableColumnChanged: [columnName: string | null];
 }>();
 
 defineSlots<{ actions: {} }>();
 
 const locale = useI18n();
 const nodeTypeStore = useNodeTypesStore();
+const ndvStore = useNDVStore();
+const experimentalNdvStore = useExperimentalNdvStore();
 
 const type = computed(() => nodeTypeStore.getNodeType(logEntry.node.type));
 const consumedTokens = computed(() => getSubtreeTotalConsumedTokens(logEntry, false));
@@ -52,6 +70,13 @@ const resizer = useResizablePanel('N8N_LOGS_INPUT_PANEL_WIDTH', {
 	allowFullSize: true,
 });
 const shouldResize = computed(() => panels === LOG_DETAILS_PANEL_STATE.BOTH);
+const searchShortcutPriorityPanel = computed(() =>
+	ndvStore.isNDVOpen || experimentalNdvStore.isMapperOpen
+		? undefined
+		: panels === LOG_DETAILS_PANEL_STATE.INPUT
+			? 'input'
+			: 'output',
+);
 
 function handleResizeEnd() {
 	if (resizer.isCollapsed.value) {
@@ -71,18 +96,18 @@ function handleResizeEnd() {
 		<LogsPanelHeader
 			data-test-id="log-details-header"
 			:class="$style.header"
+			:is-clickable="isHeaderClickable"
 			@click="emit('clickHeader')"
 		>
 			<template #title>
 				<div :class="$style.title">
 					<NodeIcon :node-type="type" :size="16" :class="$style.icon" />
 					<LogsViewNodeName
-						:latest-name="latestInfo?.name ?? logEntry.node.name"
-						:name="logEntry.node.name"
+						:name="latestInfo?.name ?? logEntry.node.name"
 						:is-deleted="latestInfo?.deleted ?? false"
 					/>
 					<LogsViewExecutionSummary
-						v-if="isOpen"
+						v-if="isOpen && logEntry.runData !== undefined"
 						:class="$style.executionSummary"
 						:status="logEntry.runData.executionStatus ?? 'unknown'"
 						:consumed-tokens="consumedTokens"
@@ -92,7 +117,7 @@ function handleResizeEnd() {
 				</div>
 			</template>
 			<template #actions>
-				<div v-if="isOpen && !isTriggerNode" :class="$style.actions">
+				<div v-if="isOpen && !isTriggerNode && !isPlaceholderLog(logEntry)" :class="$style.actions">
 					<KeyboardShortcutTooltip
 						:label="locale.baseText('generic.shortcutHint')"
 						:shortcut="{ keys: ['i'] }"
@@ -124,36 +149,49 @@ function handleResizeEnd() {
 			</template>
 		</LogsPanelHeader>
 		<div v-if="isOpen" :class="$style.content" data-test-id="logs-details-body">
-			<N8nResizeWrapper
-				v-if="!isTriggerNode && panels !== LOG_DETAILS_PANEL_STATE.OUTPUT"
-				:class="{
-					[$style.inputResizer]: true,
-					[$style.collapsed]: resizer.isCollapsed.value,
-					[$style.full]: resizer.isFullSize.value,
-				}"
-				:width="resizer.size.value"
-				:style="shouldResize ? { width: `${resizer.size.value ?? 0}px` } : undefined"
-				:supported-directions="['right']"
-				:is-resizing-enabled="shouldResize"
-				:window="window"
-				@resize="resizer.onResize"
-				@resizeend="handleResizeEnd"
-			>
+			<div v-if="isPlaceholderLog(logEntry)" :class="$style.placeholder">
+				<N8nText color="text-base">
+					{{ locale.baseText('ndv.output.runNodeHint') }}
+				</N8nText>
+			</div>
+			<template v-else>
+				<N8nResizeWrapper
+					v-if="!isTriggerNode && panels !== LOG_DETAILS_PANEL_STATE.OUTPUT"
+					:class="{
+						[$style.inputResizer]: true,
+						[$style.collapsed]: resizer.isCollapsed.value,
+						[$style.full]: resizer.isFullSize.value,
+					}"
+					:width="resizer.size.value"
+					:style="shouldResize ? { width: `${resizer.size.value ?? 0}px` } : undefined"
+					:supported-directions="['right']"
+					:is-resizing-enabled="shouldResize"
+					:window="window"
+					@resize="resizer.onResize"
+					@resizeend="handleResizeEnd"
+				>
+					<LogsViewRunData
+						data-test-id="log-details-input"
+						pane-type="input"
+						:title="locale.baseText('logs.details.header.actions.input')"
+						:log-entry="logEntry"
+						:collapsing-table-column-name="collapsingInputTableColumnName"
+						:search-shortcut="searchShortcutPriorityPanel === 'input' ? 'ctrl+f' : undefined"
+						@collapsing-table-column-changed="emit('collapsingInputTableColumnChanged', $event)"
+					/>
+				</N8nResizeWrapper>
 				<LogsViewRunData
-					data-test-id="log-details-input"
-					pane-type="input"
-					:title="locale.baseText('logs.details.header.actions.input')"
+					v-if="isTriggerNode || panels !== LOG_DETAILS_PANEL_STATE.INPUT"
+					data-test-id="log-details-output"
+					pane-type="output"
+					:class="$style.outputPanel"
+					:title="locale.baseText('logs.details.header.actions.output')"
 					:log-entry="logEntry"
+					:collapsing-table-column-name="collapsingOutputTableColumnName"
+					:search-shortcut="searchShortcutPriorityPanel === 'output' ? 'ctrl+f' : undefined"
+					@collapsing-table-column-changed="emit('collapsingOutputTableColumnChanged', $event)"
 				/>
-			</N8nResizeWrapper>
-			<LogsViewRunData
-				v-if="isTriggerNode || panels !== LOG_DETAILS_PANEL_STATE.INPUT"
-				data-test-id="log-details-output"
-				pane-type="output"
-				:class="$style.outputPanel"
-				:title="locale.baseText('logs.details.header.actions.output')"
-				:log-entry="logEntry"
-			/>
+			</template>
 		</div>
 	</div>
 </template>
@@ -169,14 +207,14 @@ function handleResizeEnd() {
 }
 
 .header {
-	padding: var(--spacing-2xs);
+	padding: var(--spacing--2xs);
 }
 
 .actions {
 	display: flex;
 	align-items: center;
-	gap: var(--spacing-2xs);
-	padding-inline-end: var(--spacing-2xs);
+	gap: var(--spacing--2xs);
+	padding-inline-end: var(--spacing--2xs);
 
 	.pressed {
 		background-color: var(--color-button-secondary-focus-outline);
@@ -190,7 +228,7 @@ function handleResizeEnd() {
 }
 
 .icon {
-	margin-right: var(--spacing-2xs);
+	margin-right: var(--spacing--2xs);
 }
 
 .executionSummary {
@@ -215,7 +253,14 @@ function handleResizeEnd() {
 	flex-shrink: 0;
 
 	&:not(:is(:last-child, .collapsed, .full)) {
-		border-right: var(--border-base);
+		border-right: var(--border);
 	}
+}
+
+.placeholder {
+	flex-grow: 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
 }
 </style>

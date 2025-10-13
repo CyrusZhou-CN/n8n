@@ -5,15 +5,19 @@ import * as TelemetryHelpers from './telemetry-helpers';
 
 export * from './errors';
 export * from './constants';
+export * from './common';
 export * from './cron';
+export * from './data-table.types';
 export * from './deferred-promise';
 export * from './global-state';
 export * from './interfaces';
 export * from './message-event-bus';
 export * from './execution-status';
 export * from './expression';
+export * from './expressions/expression-helpers';
 export * from './from-ai-parse-utils';
 export * from './node-helpers';
+export * from './tool-helpers';
 export * from './node-reference-parser-utils';
 export * from './metadata-utils';
 export * from './workflow';
@@ -27,9 +31,11 @@ export {
 	isObjectEmpty,
 	deepCopy,
 	jsonParse,
+	base64DecodeUTF8,
 	jsonStringify,
 	replaceCircularReferences,
 	sleep,
+	sleepWithAbort,
 	fileTypeFromMimeType,
 	assert,
 	removeCircularRefs,
@@ -38,6 +44,8 @@ export {
 	randomString,
 	isSafeObjectProperty,
 	setSafeObjectProperty,
+	isDomainAllowed,
+	isCommunityPackageName,
 } from './utils';
 export {
 	isINodeProperties,
@@ -49,6 +57,7 @@ export {
 	isResourceMapperValue,
 	isResourceLocatorValue,
 	isFilterValue,
+	isNodeConnectionType,
 } from './type-guards';
 
 export {
@@ -62,6 +71,9 @@ export { ExpressionExtensions } from './extensions';
 export * as ExpressionParser from './extensions/expression-parser';
 export { NativeMethods } from './native-methods';
 export * from './node-parameters/filter-parameter';
+export * from './node-parameters/parameter-type-validation';
+export * from './node-parameters/path-utils';
+export * from './evaluation-helpers';
 
 export type {
 	DocMetadata,

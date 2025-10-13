@@ -1,12 +1,12 @@
+import { mockInstance } from '@n8n/backend-test-utils';
 import { GlobalConfig } from '@n8n/config';
 import type { WorkflowEntity } from '@n8n/db';
-import { ExecutionRepository } from '@n8n/db';
-import { WorkflowRepository } from '@n8n/db';
+import { ExecutionRepository, WorkflowRepository } from '@n8n/db';
 import { Container } from '@n8n/di';
 import { mock } from 'jest-mock-extended';
 import { ExternalSecretsProxy } from 'n8n-core';
-import type { IWorkflowBase } from 'n8n-workflow';
 import type {
+	IWorkflowBase,
 	IExecuteWorkflowInfo,
 	IWorkflowExecuteAdditionalData,
 	ExecuteWorkflowOptions,
@@ -24,12 +24,12 @@ import {
 	SubworkflowPolicyChecker,
 } from '@/executions/pre-execution-checks';
 import { ExternalHooks } from '@/external-hooks';
+import { DataTableProxyService } from '@/modules/data-table/data-table-proxy.service';
 import { UrlService } from '@/services/url.service';
 import { WorkflowStatisticsService } from '@/services/workflow-statistics.service';
 import { Telemetry } from '@/telemetry';
 import { executeWorkflow, getBase, getRunData } from '@/workflow-execute-additional-data';
 import * as WorkflowHelpers from '@/workflow-helpers';
-import { mockInstance } from '@test/mocking';
 
 const EXECUTION_ID = '123';
 const LAST_NODE_EXECUTED = 'Last node executed';
@@ -99,12 +99,13 @@ describe('WorkflowExecuteAdditionalData', () => {
 	mockInstance(CredentialsPermissionChecker);
 	mockInstance(SubworkflowPolicyChecker);
 	mockInstance(WorkflowStatisticsService);
+	mockInstance(DataTableProxyService);
 
 	const urlService = mockInstance(UrlService);
 	Container.set(UrlService, urlService);
 
 	test('logAiEvent should call MessageEventBus', async () => {
-		const additionalData = await getBase('user-id');
+		const additionalData = await getBase({ userId: 'user-id', workflowId: 'workflow-id' });
 
 		const eventName = 'ai-messages-retrieved-from-memory';
 		const payload = {
@@ -314,21 +315,23 @@ describe('WorkflowExecuteAdditionalData', () => {
 
 		it('should include userId when provided', async () => {
 			const userId = 'test-user-id';
-			const additionalData = await getBase(userId);
+			const additionalData = await getBase({ userId });
 
 			expect(additionalData.userId).toBe(userId);
 		});
 
 		it('should include currentNodeParameters when provided', async () => {
 			const currentNodeParameters = { param1: 'value1' };
-			const additionalData = await getBase(undefined, currentNodeParameters);
+			const additionalData = await getBase({ currentNodeParameters });
 
 			expect(additionalData.currentNodeParameters).toBe(currentNodeParameters);
 		});
 
 		it('should include executionTimeoutTimestamp when provided', async () => {
 			const executionTimeoutTimestamp = Date.now() + 1000;
-			const additionalData = await getBase(undefined, undefined, executionTimeoutTimestamp);
+			const additionalData = await getBase({
+				executionTimeoutTimestamp,
+			});
 
 			expect(additionalData.executionTimeoutTimestamp).toBe(executionTimeoutTimestamp);
 		});

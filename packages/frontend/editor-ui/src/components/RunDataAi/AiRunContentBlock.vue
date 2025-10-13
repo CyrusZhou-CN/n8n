@@ -6,9 +6,8 @@ import { NodeConnectionTypes } from 'n8n-workflow';
 import type { NodeConnectionType, NodeError } from 'n8n-workflow';
 import RunDataAi from '@/components/RunDataParsedAiContent.vue';
 import { parseAiContent } from '@/utils/aiUtils';
-import { N8nRadioButtons } from '@n8n/design-system';
-import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
-
+import { N8nIcon, N8nRadioButtons } from '@n8n/design-system';
+import NodeErrorView from '@/components/Error/NodeErrorView.vue';
 const props = defineProps<{
 	runData: IAiDataContent;
 	error?: NodeError;
@@ -52,7 +51,7 @@ function onRenderTypeChange(value: 'rendered' | 'json') {
 	<div :class="$style.block">
 		<header :class="$style.blockHeader" @click="onBlockHeaderClick">
 			<button :class="$style.blockToggle">
-				<FontAwesomeIcon :icon="isExpanded ? 'angle-down' : 'angle-right'" size="lg" />
+				<N8nIcon :icon="isExpanded ? 'chevron-down' : 'chevron-right'" size="large" />
 			</button>
 			<p :class="$style.blockTitle">{{ capitalize(runData.inOut) }}</p>
 			<N8nRadioButtons
@@ -87,10 +86,10 @@ function onRenderTypeChange(value: 'rendered' | 'json') {
 
 <style lang="scss" module>
 .block {
-	padding: var(--spacing-s) 0 var(--spacing-2xs) var(--spacing-2xs);
-	border: 1px solid var(--color-foreground-light);
-	margin-top: var(--spacing-s);
-	border-radius: var(--border-radius-base);
+	padding: var(--spacing--sm) 0 var(--spacing--2xs) var(--spacing--2xs);
+	border: 1px solid var(--color--foreground--tint-1);
+	margin-top: var(--spacing--sm);
+	border-radius: var(--radius);
 }
 
 :root .blockContent {
@@ -106,7 +105,7 @@ function onRenderTypeChange(value: 'rendered' | 'json') {
 	opacity: 0;
 	height: fit-content;
 	margin-left: auto;
-	margin-right: var(--spacing-2xs);
+	margin-right: var(--spacing--2xs);
 
 	.block:hover & {
 		opacity: 1;
@@ -115,11 +114,11 @@ function onRenderTypeChange(value: 'rendered' | 'json') {
 
 .blockHeader {
 	display: flex;
-	gap: var(--spacing-xs);
+	gap: var(--spacing--xs);
 	cursor: pointer;
 	/* This hack is needed to make the whole surface of header clickable  */
-	margin: calc(-1 * var(--spacing-xs));
-	padding: var(--spacing-2xs) var(--spacing-xs);
+	margin: calc(-1 * var(--spacing--xs));
+	padding: var(--spacing--2xs) var(--spacing--xs);
 	align-items: center;
 
 	& * {
@@ -128,21 +127,21 @@ function onRenderTypeChange(value: 'rendered' | 'json') {
 }
 
 .blockTitle {
-	font-size: var(--font-size-s);
-	color: var(--color-text-dark);
+	font-size: var(--font-size--sm);
+	color: var(--color--text--shade-1);
 	margin: 0;
-	padding-bottom: var(--spacing-4xs);
+	padding-bottom: var(--spacing--4xs);
 }
 
 .blockToggle {
 	border: none;
 	background: none;
 	padding: 0;
-	color: var(--color-text-base);
-	margin-top: calc(-1 * var(--spacing-3xs));
+	color: var(--color--text);
+	margin-top: calc(-1 * var(--spacing--3xs));
 }
 
 .error {
-	padding: var(--spacing-s) 0;
+	padding: var(--spacing--sm) 0;
 }
 </style>

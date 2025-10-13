@@ -3,8 +3,7 @@ import type { INodePropertyTypeOptions, ResourceMapperFields } from 'n8n-workflo
 import { computed, ref, watch } from 'vue';
 import { i18n as locale } from '@n8n/i18n';
 import { useNodeSpecificationValues } from '@/composables/useNodeSpecificationValues';
-import { N8nInputLabel, N8nSelect, N8nText } from '@n8n/design-system';
-
+import { N8nIcon, N8nInputLabel, N8nLink, N8nOption, N8nSelect, N8nText } from '@n8n/design-system';
 interface Props {
 	initialValue: string;
 	fieldsToMap: ResourceMapperFields['fields'];
@@ -70,7 +69,7 @@ const errorMessage = computed<string>(() => {
 			});
 		}
 		// No data error message
-		if (props.fieldsToMap.length === 0) {
+		if (props.fieldsToMap.length === 0 && !props.typeOptions?.resourceMapper?.hideNoDataError) {
 			return (
 				// Use custom error message if defined
 				resourceMapperTypeOptions.value?.noFieldsError ||
@@ -138,7 +137,7 @@ defineExpose({
 			</div>
 			<div class="mt-5xs">
 				<N8nText v-if="loading" size="small">
-					<N8nIcon icon="sync-alt" size="xsmall" :spin="true" />
+					<N8nIcon icon="refresh-cw" size="xsmall" :spin="true" />
 					{{
 						locale.baseText('resourceMapper.fetchingFields.message', {
 							interpolate: {
@@ -148,7 +147,7 @@ defineExpose({
 					}}
 				</N8nText>
 				<N8nText v-else-if="errorMessage !== ''" size="small" color="danger">
-					<N8nIcon icon="exclamation-triangle" size="xsmall" />
+					<N8nIcon icon="triangle-alert" size="xsmall" />
 					{{ errorMessage }}
 					<N8nLink size="small" theme="danger" :underline="true" @click="onRetryClick">
 						{{ locale.baseText('generic.retry') }}

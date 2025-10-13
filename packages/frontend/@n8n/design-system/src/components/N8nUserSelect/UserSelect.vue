@@ -74,7 +74,7 @@ const onBlur = () => emit('blur');
 const onFocus = () => emit('focus');
 
 const getLabel = (user: IUser) =>
-	!user.fullName ? user.email : `${user.fullName} (${user.email})`;
+	(!user.fullName ? user.email : `${user.fullName} (${user.email})`) ?? '';
 </script>
 
 <template>
@@ -112,7 +112,7 @@ const getLabel = (user: IUser) =>
 
 <style lang="scss" module>
 .itemContainer {
-	--select-option-padding: var(--spacing-2xs) var(--spacing-s);
+	--select-option-padding: var(--spacing--2xs) var(--spacing--sm);
 	--select-option-line-height: 1;
 }
 

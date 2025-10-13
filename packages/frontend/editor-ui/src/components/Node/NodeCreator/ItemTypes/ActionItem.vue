@@ -3,13 +3,14 @@ import { reactive, computed, toRefs } from 'vue';
 import type { ActionTypeDescription, SimplifiedNodeType } from '@/Interface';
 import { WEBHOOK_NODE_TYPE, DRAG_EVENT_DATA_KEY } from '@/constants';
 
-import { getNewNodePosition, NODE_SIZE } from '@/utils/nodeViewUtils';
+import { DEFAULT_NODE_SIZE, getNewNodePosition } from '@/utils/nodeViewUtils';
 import NodeIcon from '@/components/NodeIcon.vue';
 
 import { useViewStacks } from '../composables/useViewStacks';
 import { useActions } from '../composables/useActions';
 import { useTelemetry } from '@/composables/useTelemetry';
 
+import { N8nNodeCreatorNode } from '@n8n/design-system';
 export interface Props {
 	nodeType: SimplifiedNodeType;
 	action: ActionTypeDescription;
@@ -76,7 +77,10 @@ function onDragOver(event: DragEvent): void {
 		return;
 	}
 
-	const [x, y] = getNewNodePosition([], [event.pageX - NODE_SIZE / 2, event.pageY - NODE_SIZE / 2]);
+	const [x, y] = getNewNodePosition(
+		[],
+		[event.pageX - DEFAULT_NODE_SIZE[0] / 2, event.pageY - DEFAULT_NODE_SIZE[1] / 2],
+	);
 
 	state.draggablePosition = { x, y };
 }
@@ -95,7 +99,7 @@ const { draggableDataTransfer, dragging } = toRefs(state);
 </script>
 
 <template>
-	<n8n-node-creator-node
+	<N8nNodeCreatorNode
 		draggable
 		:class="$style.action"
 		:title="action.displayName"
@@ -113,24 +117,24 @@ const { draggableDataTransfer, dragging } = toRefs(state);
 		<template #icon>
 			<NodeIcon :node-type="action" />
 		</template>
-	</n8n-node-creator-node>
+	</N8nNodeCreatorNode>
 </template>
 
 <style lang="scss" module>
 .action {
-	--node-creator-name-size: var(--font-size-2xs);
+	--node-creator-name-size: var(--font-size--2xs);
 	--node-creator-name-weight: var(--font-weight-normal);
 	--trigger-icon-background-color: #{$trigger-icon-background-color};
 	--trigger-icon-border-color: #{$trigger-icon-border-color};
 	--node-icon-size: 20px;
-	--node-icon-margin-right: var(--spacing-xs);
+	--node-icon-margin-right: var(--spacing--xs);
 
-	margin-left: var(--spacing-s);
-	margin-right: var(--spacing-s);
-	padding: var(--spacing-2xs) 0;
+	margin-left: var(--spacing--sm);
+	margin-right: var(--spacing--sm);
+	padding: var(--spacing--2xs) 0;
 }
 .nodeIcon {
-	margin-right: var(--spacing-xs);
+	margin-right: var(--spacing--xs);
 }
 
 .draggable {
@@ -139,9 +143,9 @@ const { draggableDataTransfer, dragging } = toRefs(state);
 	position: fixed;
 	z-index: 1;
 	opacity: 0.66;
-	border: 2px solid var(--color-foreground-xdark);
-	border-radius: var(--border-radius-large);
-	background-color: var(--color-background-xlight);
+	border: 2px solid var(--color--foreground--shade-2);
+	border-radius: var(--radius--lg);
+	background-color: var(--color--background--light-3);
 	display: flex;
 	justify-content: center;
 	align-items: center;

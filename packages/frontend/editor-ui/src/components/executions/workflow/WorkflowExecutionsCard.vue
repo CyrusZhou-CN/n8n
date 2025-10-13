@@ -8,10 +8,18 @@ import { useExecutionHelpers } from '@/composables/useExecutionHelpers';
 import type { ExecutionSummary } from 'n8n-workflow';
 import { useWorkflowsStore } from '@/stores/workflows.store';
 import { useI18n } from '@n8n/i18n';
-import type { PermissionsRecord } from '@/permissions';
+import type { PermissionsRecord } from '@n8n/permissions';
 import { useSettingsStore } from '@/stores/settings.store';
 import { toDayMonth, toTime } from '@/utils/formatters/dateFormatter';
 
+import {
+	N8nActionDropdown,
+	N8nIcon,
+	N8nSpinner,
+	N8nTags,
+	N8nText,
+	N8nTooltip,
+} from '@n8n/design-system';
 const props = defineProps<{
 	execution: ExecutionSummary;
 	highlight?: boolean;
@@ -73,7 +81,7 @@ function onRetryMenuItemSelect(action: string): void {
 			[$style.showGap]: showGap,
 		}"
 	>
-		<router-link
+		<RouterLink
 			:class="$style.executionLink"
 			:to="{
 				name: VIEWS.EXECUTION_PREVIEW,
@@ -142,12 +150,8 @@ function onRetryMenuItemSelect(action: string): void {
 				</div>
 				<div v-if="isAnnotationEnabled" :class="$style.annotation">
 					<div v-if="execution.annotation?.vote" :class="$style.ratingIcon">
-						<FontAwesomeIcon
-							v-if="execution.annotation.vote == 'up'"
-							:class="$style.up"
-							icon="thumbs-up"
-						/>
-						<FontAwesomeIcon v-else :class="$style.down" icon="thumbs-down" />
+						<N8nIcon v-if="execution.annotation.vote == 'up'" :class="$style.up" icon="thumbs-up" />
+						<N8nIcon v-else :class="$style.down" icon="thumbs-down" />
 					</div>
 					<N8nTags
 						v-if="executionUIDetails.tags.length > 0"
@@ -162,7 +166,7 @@ function onRetryMenuItemSelect(action: string): void {
 					:class="[$style.icon, $style.retry]"
 					:items="retryExecutionActions"
 					:disabled="!workflowPermissions.execute"
-					activator-icon="redo"
+					activator-icon="redo-2"
 					data-test-id="retry-execution-button"
 					@select="onRetryMenuItemSelect"
 				/>
@@ -170,35 +174,35 @@ function onRetryMenuItemSelect(action: string): void {
 					<template #content>
 						<span>{{ locale.baseText('executionsList.test') }}</span>
 					</template>
-					<FontAwesomeIcon :class="[$style.icon, $style.manual]" icon="flask" />
+					<N8nIcon :class="[$style.icon, $style.manual]" icon="flask-conical" />
 				</N8nTooltip>
 				<N8nTooltip v-if="execution.mode === 'evaluation'" placement="top">
 					<template #content>
 						<span>{{ locale.baseText('executionsList.evaluation') }}</span>
 					</template>
-					<FontAwesomeIcon :class="[$style.icon, $style.evaluation]" icon="check-double" />
+					<N8nIcon :class="[$style.icon, $style.evaluation]" icon="check-check" />
 				</N8nTooltip>
 			</div>
-		</router-link>
+		</RouterLink>
 	</div>
 </template>
 
 <style module lang="scss">
-@import '@/styles/variables';
+@use '@/styles/variables' as *;
 
 .WorkflowExecutionsCard {
 	--execution-list-item-background: var(--execution-card-background);
-	--execution-list-item-highlight-background: var(--color-warning-tint-1);
+	--execution-list-item-highlight-background: var(--color--warning--tint-1);
 
 	display: flex;
 	flex-direction: column;
-	padding-right: var(--spacing-m);
+	padding-right: var(--spacing--md);
 
 	&.active {
-		border-left: var(--spacing-4xs) var(--border-style-base) transparent !important;
+		border-left: var(--spacing--4xs) var(--border-style) transparent !important;
 
 		.executionStatus {
-			color: var(--color-text-dark) !important;
+			color: var(--color--text--shade-1) !important;
 		}
 	}
 
@@ -217,25 +221,25 @@ function onRetryMenuItemSelect(action: string): void {
 		}
 		&,
 		& .executionLink {
-			border-left: var(--spacing-4xs) var(--border-style-base) var(--execution-card-border-running);
+			border-left: var(--spacing--4xs) var(--border-style) var(--execution-card-border-running);
 		}
 		.statusLabel,
 		.spinner {
-			color: var(--color-warning);
+			color: var(--color--warning);
 		}
 	}
 
 	&.success {
 		&,
 		& .executionLink {
-			border-left: var(--spacing-4xs) var(--border-style-base) var(--execution-card-border-success);
+			border-left: var(--spacing--4xs) var(--border-style) var(--execution-card-border-success);
 		}
 	}
 
 	&.new {
 		&,
 		& .executionLink {
-			border-left: var(--spacing-4xs) var(--border-style-base) var(--execution-card-border-waiting);
+			border-left: var(--spacing--4xs) var(--border-style) var(--execution-card-border-waiting);
 		}
 		.statusLabel {
 			color: var(--execution-card-text-waiting);
@@ -245,43 +249,43 @@ function onRetryMenuItemSelect(action: string): void {
 	&.waiting {
 		&,
 		& .executionLink {
-			border-left: var(--spacing-4xs) var(--border-style-base) var(--execution-card-border-waiting);
+			border-left: var(--spacing--4xs) var(--border-style) var(--execution-card-border-waiting);
 		}
 		.statusLabel {
-			color: var(--color-secondary);
+			color: var(--color--secondary);
 		}
 	}
 
 	&.error {
 		&,
 		& .executionLink {
-			border-left: var(--spacing-4xs) var(--border-style-base) var(--execution-card-border-error);
+			border-left: var(--spacing--4xs) var(--border-style) var(--execution-card-border-error);
 		}
 		.statusLabel {
-			color: var(--color-danger);
+			color: var(--color--danger);
 		}
 	}
 
 	&.unknown {
 		&,
 		& .executionLink {
-			border-left: var(--spacing-4xs) var(--border-style-base) var(--execution-card-border-unknown);
+			border-left: var(--spacing--4xs) var(--border-style) var(--execution-card-border-unknown);
 		}
 	}
 
 	.annotation {
 		display: flex;
 		flex-direction: row;
-		gap: var(--spacing-3xs);
+		gap: var(--spacing--3xs);
 		align-items: center;
-		margin: var(--spacing-4xs) 0 0;
+		margin: var(--spacing--4xs) 0 0;
 
 		.ratingIcon {
 			.up {
-				color: var(--color-success);
+				color: var(--color--success);
 			}
 			.down {
-				color: var(--color-danger);
+				color: var(--color--danger);
 			}
 		}
 	}
@@ -293,19 +297,19 @@ function onRetryMenuItemSelect(action: string): void {
 	width: 100%;
 	align-items: center;
 	justify-content: space-between;
-	color: var(--color-text-base);
-	font-size: var(--font-size-xs);
-	padding: var(--spacing-xs);
-	padding-right: var(--spacing-s);
+	color: var(--color--text);
+	font-size: var(--font-size--xs);
+	padding: var(--spacing--xs);
+	padding-right: var(--spacing--sm);
 	position: relative;
 	left: calc(
-		-1 * var(--spacing-4xs)
+		-1 * var(--spacing--4xs)
 	); // Hide link border under card border so it's not visible when not hovered
 
 	&:active {
 		.icon,
 		.statusLabel {
-			color: var(--color-text-base);
+			color: var(--color--text);
 		}
 	}
 }
@@ -316,11 +320,11 @@ function onRetryMenuItemSelect(action: string): void {
 }
 
 .icon {
-	font-size: var(--font-size-s);
+	font-size: var(--font-size--sm);
 
 	&.retry {
 		svg {
-			color: var(--color-primary);
+			color: var(--color--primary);
 		}
 	}
 
@@ -330,14 +334,14 @@ function onRetryMenuItemSelect(action: string): void {
 	}
 
 	& + & {
-		margin-left: var(--spacing-2xs);
+		margin-left: var(--spacing--2xs);
 	}
 }
 
 .showGap {
-	margin-bottom: var(--spacing-2xs);
+	margin-bottom: var(--spacing--2xs);
 	.executionLink {
-		border-bottom: 1px solid var(--color-foreground-dark);
+		border-bottom: 1px solid var(--color--foreground--shade-1);
 	}
 }
 </style>

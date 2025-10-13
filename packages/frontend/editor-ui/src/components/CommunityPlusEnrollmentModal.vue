@@ -2,7 +2,6 @@
 import { ref } from 'vue';
 import { createEventBus } from '@n8n/utils/event-bus';
 import type { Validatable, IValidator } from '@n8n/design-system';
-import { N8nFormInput } from '@n8n/design-system';
 import { VALID_EMAIL_REGEX, COMMUNITY_PLUS_DOCS_URL } from '@/constants';
 import Modal from '@/components/Modal.vue';
 import { useI18n } from '@n8n/i18n';
@@ -11,6 +10,7 @@ import { useUsageStore } from '@/stores/usage.store';
 import { useTelemetry } from '@/composables/useTelemetry';
 import { useUsersStore } from '@/stores/users.store';
 
+import { N8nButton, N8nFormInput, N8nText } from '@n8n/design-system';
 const props = defineProps<{
 	modalName: string;
 	data?: {
@@ -25,6 +25,7 @@ const usageStore = useUsageStore();
 const telemetry = useTelemetry();
 const usersStore = useUsersStore();
 
+const isLoading = ref(false);
 const valid = ref(false);
 const email = ref(usersStore.currentUser?.email ?? '');
 const validationRules = ref([{ name: 'email' }]);
@@ -56,6 +57,11 @@ const closeModal = () => {
 };
 
 const confirm = async () => {
+	if (!valid.value || isLoading.value) {
+		return;
+	}
+
+	isLoading.value = true;
 	try {
 		const { title, text } = await usageStore.registerCommunityEdition(email.value);
 		closeModal();
@@ -71,6 +77,8 @@ const confirm = async () => {
 		});
 	} catch (error) {
 		toast.showError(error, i18n.baseText('communityPlusModal.error.title'));
+	} finally {
+		isLoading.value = false;
 	}
 };
 </script>
@@ -134,6 +142,7 @@ const confirm = async () => {
 					:validation-rules="validationRules"
 					:validators="validators"
 					@validate="valid = $event"
+					@keyup.enter="confirm"
 				/>
 			</div>
 		</template>
@@ -147,10 +156,15 @@ const confirm = async () => {
 				</N8nText>
 			</div>
 			<div :class="$style.buttons">
-				<N8nButton :class="$style.skip" type="secondary" text @click="closeModal">{{
-					i18n.baseText('communityPlusModal.button.skip')
-				}}</N8nButton>
-				<N8nButton :disabled="!valid" type="primary" @click="confirm">
+				<N8nButton
+					:class="$style.skip"
+					type="secondary"
+					text
+					:disabled="isLoading"
+					@click="closeModal"
+					>{{ i18n.baseText('communityPlusModal.button.skip') }}</N8nButton
+				>
+				<N8nButton :disabled="!valid || isLoading" type="primary" @click="confirm">
 					{{ i18n.baseText('communityPlusModal.button.confirm') }}
 				</N8nButton>
 			</div>
@@ -160,27 +174,27 @@ const confirm = async () => {
 
 <style lang="scss" module>
 .notice {
-	margin-bottom: var(--spacing-l);
+	margin-bottom: var(--spacing--lg);
 }
 
 .features {
-	padding: var(--spacing-s) var(--spacing-l) 0;
+	padding: var(--spacing--sm) var(--spacing--lg) 0;
 	list-style: none;
 
 	li {
 		display: flex;
-		padding: 0 var(--spacing-s) var(--spacing-m) 0;
+		padding: 0 var(--spacing--sm) var(--spacing--md) 0;
 
 		i {
 			display: inline-block;
-			margin: var(--spacing-5xs) var(--spacing-xs) 0 0;
+			margin: var(--spacing--5xs) var(--spacing--xs) 0 0;
 			font-style: normal;
-			font-size: var(--font-size-s);
+			font-size: var(--font-size--sm);
 		}
 
 		strong {
 			display: block;
-			margin-bottom: var(--spacing-4xs);
+			margin-bottom: var(--spacing--4xs);
 		}
 	}
 }

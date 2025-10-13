@@ -28,22 +28,20 @@ import { useMessage } from '@/composables/useMessage';
 import { useNodeHelpers } from '@/composables/useNodeHelpers';
 import { useToast } from '@/composables/useToast';
 import { CREDENTIAL_EDIT_MODAL_KEY, EnterpriseEditionFeature, MODAL_CONFIRM } from '@/constants';
-import { getResourcePermissions } from '@/permissions';
 import { useCredentialsStore } from '@/stores/credentials.store';
 import { useNDVStore } from '@/stores/ndv.store';
 import { useNodeTypesStore } from '@/stores/nodeTypes.store';
 import { useSettingsStore } from '@/stores/settings.store';
 import { useUIStore } from '@/stores/ui.store';
 import { useWorkflowsStore } from '@/stores/workflows.store';
-import type { Project, ProjectSharingData } from '@/types/projects.types';
-import { N8nInlineTextEdit, N8nText, type IMenuItem } from '@n8n/design-system';
+import type { Project, ProjectSharingData } from '@/features/projects/projects.types';
+import { getResourcePermissions } from '@n8n/permissions';
 import { assert } from '@n8n/utils/assert';
 import { createEventBus } from '@n8n/utils/event-bus';
 
 import { useExternalHooks } from '@/composables/useExternalHooks';
-import { useI18n } from '@n8n/i18n';
 import { useTelemetry } from '@/composables/useTelemetry';
-import { useProjectsStore } from '@/stores/projects.store';
+import { useProjectsStore } from '@/features/projects/projects.store';
 import { isExpression, isTestableExpression } from '@/utils/expressions';
 import {
 	getNodeAuthOptions,
@@ -51,7 +49,18 @@ import {
 	updateNodeAuthType,
 } from '@/utils/nodeTypesUtils';
 import { isCredentialModalState, isValidCredentialResponse } from '@/utils/typeGuards';
+import { useI18n } from '@n8n/i18n';
 import { useElementSize } from '@vueuse/core';
+import { useRouter } from 'vue-router';
+
+import {
+	N8nIconButton,
+	N8nInlineTextEdit,
+	N8nMenuItem,
+	N8nText,
+	type IMenuItem,
+} from '@n8n/design-system';
+import { injectWorkflowState } from '@/composables/useWorkflowState';
 
 type Props = {
 	modalName: string;
@@ -66,6 +75,7 @@ const ndvStore = useNDVStore();
 const settingsStore = useSettingsStore();
 const uiStore = useUIStore();
 const workflowsStore = useWorkflowsStore();
+const workflowState = injectWorkflowState();
 const nodeTypesStore = useNodeTypesStore();
 const projectsStore = useProjectsStore();
 
@@ -75,6 +85,7 @@ const toast = useToast();
 const message = useMessage();
 const i18n = useI18n();
 const telemetry = useTelemetry();
+const router = useRouter();
 
 const activeTab = ref('connection');
 const authError = ref('');
@@ -241,9 +252,7 @@ const credentialProperties = computed(() => {
 		if (!displayCredentialParameter(propertyData)) {
 			return false;
 		}
-		return (
-			!type.__overwrittenProperties || !type.__overwrittenProperties.includes(propertyData.name)
-		);
+		return !type.__overwrittenProperties?.includes(propertyData.name);
 	});
 
 	/**
@@ -588,7 +597,7 @@ function getParentTypes(name: string): string[] {
 	const types: string[] = [];
 	for (const typeName of type.extends) {
 		types.push(typeName);
-		types.push.apply(types, getParentTypes(typeName)); // eslint-disable-line prefer-spread
+		types.push.apply(types, getParentTypes(typeName));
 	}
 
 	return types;
@@ -773,16 +782,9 @@ async function saveCredential(): Promise<ICredentialsResponse | null> {
 	return credential;
 }
 
-const createToastMessagingForNewCredentials = (
-	credentialDetails: ICredentialsDecrypted,
-	project?: Project | null,
-) => {
+const createToastMessagingForNewCredentials = (project?: Project | null) => {
 	let toastTitle = i18n.baseText('credentials.create.personal.toast.title');
 	let toastText = '';
-
-	if (!credentialDetails.sharedWithProjects) {
-		toastText = i18n.baseText('credentials.create.personal.toast.text');
-	}
 
 	if (
 		projectsStore.currentProject &&
@@ -810,10 +812,19 @@ async function createCredential(
 	let credential;
 
 	try {
-		credential = await credentialsStore.createNewCredential(credentialDetails, project?.id);
+		credential = await credentialsStore.createNewCredential(
+			credentialDetails,
+			project?.id,
+			router.currentRoute.value.query.uiContext?.toString(),
+		);
+
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		const { uiContext, ...rest } = router.currentRoute.value.query;
+		void router.replace({ query: rest });
+
 		hasUnsavedChanges.value = false;
 
-		const { title, message } = createToastMessagingForNewCredentials(credentialDetails, project);
+		const { title, message } = createToastMessagingForNewCredentials(project);
 
 		toast.showMessage({
 			title,
@@ -1031,7 +1042,7 @@ async function onAuthTypeChanged(type: string): Promise<void> {
 		uiStore.activeCredentialType = credentialsForType.name;
 		resetCredentialData();
 		// Update current node auth type so credentials dropdown can be displayed properly
-		updateNodeAuthType(ndvStore.activeNode, type);
+		updateNodeAuthType(workflowState, ndvStore.activeNode, type);
 		// Also update credential name but only if the default name is still used
 		if (hasUnsavedChanges.value && !hasUserSpecifiedName.value) {
 			const newDefaultName = await credentialsStore.getNewCredentialName({
@@ -1103,10 +1114,10 @@ const { width } = useElementSize(credNameRef);
 					</div>
 				</div>
 				<div :class="$style.credActions">
-					<n8n-icon-button
+					<N8nIconButton
 						v-if="currentCredential && credentialPermissions.delete"
 						:title="i18n.baseText('credentialEdit.credentialEdit.delete')"
-						icon="trash"
+						icon="trash-2"
 						type="tertiary"
 						:disabled="isSaving"
 						:loading="isDeleting"
@@ -1131,12 +1142,13 @@ const { width } = useElementSize(credNameRef);
 		<template #content>
 			<div :class="$style.container" data-test-id="credential-edit-dialog">
 				<div v-if="!isEditingManagedCredential" :class="$style.sidebar">
-					<n8n-menu
-						mode="tabs"
-						:items="sidebarItems"
-						:transparent-background="true"
-						@select="onTabSelect"
-					></n8n-menu>
+					<N8nMenuItem
+						v-for="item in sidebarItems"
+						:item="item"
+						:key="item.id"
+						:active="activeTab === item.id"
+						@click="() => onTabSelect(item.id)"
+					/>
 				</div>
 				<div
 					v-if="activeTab === 'connection' && credentialType"
@@ -1195,11 +1207,11 @@ const { width } = useElementSize(credNameRef);
 
 	:global(.el-dialog__header) {
 		padding-bottom: 0;
-		border-bottom: var(--border-base);
+		border-bottom: var(--border);
 	}
 
 	:global(.el-dialog__body) {
-		padding-top: var(--spacing-l);
+		padding-top: var(--spacing--lg);
 		position: relative;
 	}
 }
@@ -1214,13 +1226,13 @@ const { width } = useElementSize(credNameRef);
 	display: flex;
 	width: 100%;
 	flex-direction: column;
-	gap: var(--spacing-4xs);
+	gap: var(--spacing--4xs);
 }
 
 .sidebar {
 	max-width: 170px;
 	min-width: 170px;
-	margin-right: var(--spacing-l);
+	margin-right: var(--spacing--lg);
 	flex-grow: 1;
 
 	ul {
@@ -1242,24 +1254,24 @@ const { width } = useElementSize(credNameRef);
 	align-items: center;
 	flex-direction: row;
 	flex-grow: 1;
-	margin-bottom: var(--spacing-l);
+	margin-bottom: var(--spacing--lg);
 }
 
 .credActions {
 	display: flex;
 	flex-direction: row;
 	align-items: center;
-	margin-right: var(--spacing-xl);
-	margin-bottom: var(--spacing-l);
+	margin-right: var(--spacing--xl);
+	margin-bottom: var(--spacing--lg);
 
 	> * {
-		margin-left: var(--spacing-2xs);
+		margin-left: var(--spacing--2xs);
 	}
 }
 
 .credIcon {
 	display: flex;
 	align-items: center;
-	margin-right: var(--spacing-xs);
+	margin-right: var(--spacing--xs);
 }
 </style>

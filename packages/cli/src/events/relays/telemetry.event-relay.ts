@@ -6,12 +6,16 @@ import {
 	WorkflowRepository,
 } from '@n8n/db';
 import { Service } from '@n8n/di';
+import { PROJECT_OWNER_ROLE_SLUG } from '@n8n/permissions';
 import { snakeCase } from 'change-case';
 import { BinaryDataConfig, InstanceSettings } from 'n8n-core';
 import type { ExecutionStatus, INodesGraphResult, ITelemetryTrackProperties } from 'n8n-workflow';
 import { TelemetryHelpers } from 'n8n-workflow';
 import os from 'node:os';
 import { get as pslGet } from 'psl';
+
+import { Telemetry } from '../../telemetry';
+import { EventRelay } from './event-relay';
 
 import config from '@/config';
 import { N8N_VERSION } from '@/constants';
@@ -21,9 +25,6 @@ import { determineFinalExecutionStatus } from '@/execution-lifecycle/shared/shar
 import type { IExecutionTrackProperties } from '@/interfaces';
 import { License } from '@/license';
 import { NodeTypes } from '@/node-types';
-
-import { EventRelay } from './event-relay';
-import { Telemetry } from '../../telemetry';
 
 @Service()
 export class TelemetryEventRelay extends EventRelay {
@@ -127,7 +128,7 @@ export class TelemetryEventRelay extends EventRelay {
 		this.telemetry.track('Project settings updated', {
 			user_id: userId,
 			role,
-			// eslint-disable-next-line @typescript-eslint/no-shadow
+
 			members: members.map(({ userId: user_id, role }) => ({ user_id, role })),
 			project_id: projectId,
 		});
@@ -149,10 +150,11 @@ export class TelemetryEventRelay extends EventRelay {
 		});
 	}
 
-	private teamProjectCreated({ userId, role }: RelayEventMap['team-project-created']) {
+	private teamProjectCreated({ userId, role, uiContext }: RelayEventMap['team-project-created']) {
 		this.telemetry.track('User created project', {
 			user_id: userId,
 			role,
+			uiContext,
 		});
 	}
 
@@ -165,12 +167,14 @@ export class TelemetryEventRelay extends EventRelay {
 		readOnlyInstance,
 		repoType,
 		connected,
+		connectionType,
 	}: RelayEventMap['source-control-settings-updated']) {
 		this.telemetry.track('User updated source control settings', {
 			branch_name: branchName,
 			read_only_instance: readOnlyInstance,
 			repo_type: repoType,
 			connected,
+			connection_type: connectionType,
 		});
 	}
 
@@ -404,6 +408,7 @@ export class TelemetryEventRelay extends EventRelay {
 		credentialId,
 		projectId,
 		projectType,
+		uiContext,
 	}: RelayEventMap['credentials-created']) {
 		this.telemetry.track('User created credentials', {
 			user_id: user.id,
@@ -411,6 +416,7 @@ export class TelemetryEventRelay extends EventRelay {
 			credential_id: credentialId,
 			project_id: projectId,
 			project_type: projectType,
+			uiContext,
 		});
 	}
 
@@ -524,6 +530,7 @@ export class TelemetryEventRelay extends EventRelay {
 		publicApi,
 		projectId,
 		projectType,
+		uiContext,
 	}: RelayEventMap['workflow-created']) {
 		const { nodeGraph } = TelemetryHelpers.generateNodesGraph(workflow, this.nodeTypes);
 
@@ -534,6 +541,7 @@ export class TelemetryEventRelay extends EventRelay {
 			public_api: publicApi,
 			project_id: projectId,
 			project_type: projectType,
+			uiContext,
 		});
 	}
 
@@ -578,7 +586,7 @@ export class TelemetryEventRelay extends EventRelay {
 	}
 
 	private async workflowSaved({ user, workflow, publicApi }: RelayEventMap['workflow-saved']) {
-		const isCloudDeployment = config.getEnv('deployment.type') === 'cloud';
+		const isCloudDeployment = this.globalConfig.deployment.type === 'cloud';
 
 		const { nodeGraph } = TelemetryHelpers.generateNodesGraph(workflow, this.nodeTypes, {
 			isCloudDeployment,
@@ -599,7 +607,7 @@ export class TelemetryEventRelay extends EventRelay {
 					projectId: workflowOwner.id,
 				});
 
-				if (projectRole && projectRole !== 'project:personalOwner') {
+				if (projectRole && projectRole?.slug !== PROJECT_OWNER_ROLE_SLUG) {
 					userRole = 'member';
 				}
 			}
@@ -658,6 +666,7 @@ export class TelemetryEventRelay extends EventRelay {
 		if (runData !== undefined) {
 			telemetryProperties.execution_mode = runData.mode;
 			telemetryProperties.is_manual = runData.mode === 'manual';
+			telemetryProperties.crashed = executionStatus === 'crashed';
 
 			let nodeGraphResult: INodesGraphResult | null = null;
 
@@ -731,6 +740,12 @@ export class TelemetryEventRelay extends EventRelay {
 					is_managed: false,
 					eval_rows_left: null,
 					...TelemetryHelpers.resolveAIMetrics(workflow.nodes, this.nodeTypes),
+					...TelemetryHelpers.resolveVectorStoreMetrics(workflow.nodes, this.nodeTypes, runData),
+					...TelemetryHelpers.extractLastExecutedNodeStructuredOutputErrorInfo(
+						workflow,
+						this.nodeTypes,
+						runData,
+					),
 				};
 
 				if (!manualExecEventProperties.node_graph_string) {
@@ -823,18 +838,17 @@ export class TelemetryEventRelay extends EventRelay {
 			},
 			execution_variables: {
 				executions_mode: config.getEnv('executions.mode'),
-				executions_timeout: config.getEnv('executions.timeout'),
-				executions_timeout_max: config.getEnv('executions.maxTimeout'),
-				executions_data_save_on_error: config.getEnv('executions.saveDataOnError'),
-				executions_data_save_on_success: config.getEnv('executions.saveDataOnSuccess'),
-				executions_data_save_on_progress: config.getEnv('executions.saveExecutionProgress'),
-				executions_data_save_manual_executions: config.getEnv(
-					'executions.saveDataManualExecutions',
-				),
+				executions_timeout: this.globalConfig.executions.timeout,
+				executions_timeout_max: this.globalConfig.executions.maxTimeout,
+				executions_data_save_on_error: this.globalConfig.executions.saveDataOnError,
+				executions_data_save_on_success: this.globalConfig.executions.saveDataOnSuccess,
+				executions_data_save_on_progress: this.globalConfig.executions.saveExecutionProgress,
+				executions_data_save_manual_executions:
+					this.globalConfig.executions.saveDataManualExecutions,
 				executions_data_prune: this.globalConfig.executions.pruneData,
 				executions_data_max_age: this.globalConfig.executions.pruneDataMaxAge,
 			},
-			n8n_deployment_type: config.getEnv('deployment.type'),
+			n8n_deployment_type: this.globalConfig.deployment.type,
 			n8n_binary_data_mode: this.binaryDataConfig.mode,
 			smtp_set_up: this.globalConfig.userManagement.emails.mode === 'smtp',
 			ldap_allowed: authenticationMethod === 'ldap',
@@ -1016,11 +1030,17 @@ export class TelemetryEventRelay extends EventRelay {
 	}
 
 	private userSignedUp({ user, userType, wasDisabledLdapUser }: RelayEventMap['user-signed-up']) {
-		this.telemetry.track('User signed up', {
+		const payload = {
 			user_id: user.id,
 			user_type: userType,
 			was_disabled_ldap_user: wasDisabledLdapUser,
-		});
+			...(this.globalConfig.deployment.type === 'cloud' && {
+				user_email: user.email,
+				user_role: user.role,
+			}),
+		};
+
+		this.telemetry.track('User signed up', payload);
 	}
 
 	private userSubmittedPersonalizationSurvey({

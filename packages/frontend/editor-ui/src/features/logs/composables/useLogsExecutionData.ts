@@ -1,32 +1,54 @@
-import { watch, computed, ref } from 'vue';
+import { watch, computed, ref, type ComputedRef } from 'vue';
 import { type IExecutionResponse } from '@/Interface';
-import { Workflow, type IRunExecutionData } from 'n8n-workflow';
+import { Workflow, type IRunExecutionData, type ITaskStartedData } from 'n8n-workflow';
 import { useWorkflowsStore } from '@/stores/workflows.store';
 import { useNodeHelpers } from '@/composables/useNodeHelpers';
-import { useThrottleFn } from '@vueuse/core';
-import { createLogTree, deepToRaw, mergeStartData } from '@/features/logs/logs.utils';
+import {
+	copyExecutionData,
+	createLogTree,
+	findSubExecutionLocator,
+	mergeStartData,
+} from '@/features/logs/logs.utils';
 import { parse } from 'flatted';
 import { useToast } from '@/composables/useToast';
-import type { LatestNodeInfo, LogEntry } from '../logs.types';
+import type { LatestNodeInfo, LogEntry, LogTreeFilter } from '../logs.types';
 import { isChatNode } from '@/utils/aiUtils';
+import { LOGS_EXECUTION_DATA_THROTTLE_DURATION, PLACEHOLDER_EMPTY_WORKFLOW_ID } from '@/constants';
+import { useThrottleFn } from '@vueuse/core';
+import { injectWorkflowState } from '@/composables/useWorkflowState';
+import { useThrottleWithReactiveDelay } from '@n8n/composables/useThrottleWithReactiveDelay';
 
-export function useLogsExecutionData() {
+interface UseLogsExecutionDataOptions {
+	/**
+	 * Enable calculation of log entries. Default: true
+	 */
+	isEnabled?: ComputedRef<boolean>;
+	filter?: ComputedRef<LogTreeFilter>;
+}
+
+export function useLogsExecutionData({ isEnabled, filter }: UseLogsExecutionDataOptions = {}) {
 	const nodeHelpers = useNodeHelpers();
 	const workflowsStore = useWorkflowsStore();
+	const workflowState = injectWorkflowState();
 	const toast = useToast();
 
-	const execData = ref<IExecutionResponse | undefined>();
+	const state = ref<
+		| { response: IExecutionResponse; startData: { [nodeName: string]: ITaskStartedData[] } }
+		| undefined
+	>();
+	const updateInterval = computed(() =>
+		workflowsStore.workflowExecutionData?.status === 'running' &&
+		Object.keys(workflowsStore.workflowExecutionData.data?.resultData.runData ?? {}).length > 1
+			? LOGS_EXECUTION_DATA_THROTTLE_DURATION
+			: 0,
+	);
+	const throttledState = useThrottleWithReactiveDelay(state, updateInterval);
+	const throttledWorkflowData = computed(() => throttledState.value?.response.workflowData);
+
 	const subWorkflowExecData = ref<Record<string, IRunExecutionData>>({});
 	const subWorkflows = ref<Record<string, Workflow>>({});
+	const workflow = ref<Workflow>();
 
-	const workflow = computed(() =>
-		execData.value
-			? new Workflow({
-					...execData.value?.workflowData,
-					nodeTypes: workflowsStore.getNodeTypes(),
-				})
-			: undefined,
-	);
 	const latestNodeNameById = computed(() =>
 		Object.values(workflow.value?.nodes ?? {}).reduce<Record<string, LatestNodeInfo>>(
 			(acc, node) => {
@@ -47,36 +69,41 @@ export function useLogsExecutionData() {
 			nodes.some(isChatNode),
 		),
 	);
+
 	const entries = computed<LogEntry[]>(() => {
-		if (!execData.value?.data || !workflow.value) {
+		if ((isEnabled !== undefined && !isEnabled.value) || !throttledState.value || !workflow.value) {
 			return [];
 		}
 
+		const mergedExecutionData = mergeStartData(
+			throttledState.value.startData,
+			throttledState.value.response,
+		);
+
 		return createLogTree(
 			workflow.value,
-			execData.value,
+			mergedExecutionData,
 			subWorkflows.value,
 			subWorkflowExecData.value,
+			filter?.value,
 		);
 	});
-	const updateInterval = computed(() => ((entries.value?.length ?? 0) > 10 ? 300 : 0));
 
 	function resetExecutionData() {
-		execData.value = undefined;
-		workflowsStore.setWorkflowExecutionData(null);
+		state.value = undefined;
+		workflowState.setWorkflowExecutionData(null);
 		nodeHelpers.updateNodesExecutionIssues();
 	}
 
 	async function loadSubExecution(logEntry: LogEntry) {
-		const executionId = logEntry.runData.metadata?.subExecution?.executionId;
-		const workflowId = logEntry.runData.metadata?.subExecution?.workflowId;
+		const locator = findSubExecutionLocator(logEntry);
 
-		if (!execData.value?.data || !executionId || !workflowId) {
+		if (!state.value || locator === undefined) {
 			return;
 		}
 
 		try {
-			const subExecution = await workflowsStore.fetchExecutionDataById(executionId);
+			const subExecution = await workflowsStore.fetchExecutionDataById(locator.executionId);
 			const data = subExecution?.data
 				? (parse(subExecution.data as unknown as string) as IRunExecutionData)
 				: undefined;
@@ -85,8 +112,8 @@ export function useLogsExecutionData() {
 				throw Error('Data is missing');
 			}
 
-			subWorkflowExecData.value[executionId] = data;
-			subWorkflows.value[workflowId] = new Workflow({
+			subWorkflowExecData.value[locator.executionId] = data;
+			subWorkflows.value[locator.workflowId] = new Workflow({
 				...subExecution.workflowData,
 				nodeTypes: workflowsStore.getNodeTypes(),
 			});
@@ -106,15 +133,13 @@ export function useLogsExecutionData() {
 		],
 		useThrottleFn(
 			([executionId], [previousExecutionId]) => {
-				execData.value =
+				state.value =
 					workflowsStore.workflowExecutionData === null
 						? undefined
-						: deepToRaw(
-								mergeStartData(
-									workflowsStore.workflowExecutionStartedData?.[1] ?? {},
-									workflowsStore.workflowExecutionData,
-								),
-							); // Create deep copy to disable reactivity
+						: {
+								response: copyExecutionData(workflowsStore.workflowExecutionData),
+								startData: workflowsStore.workflowExecutionStartedData?.[1] ?? {},
+							};
 
 				if (executionId !== previousExecutionId) {
 					// Reset sub workflow data when top-level execution changes
@@ -129,8 +154,29 @@ export function useLogsExecutionData() {
 		{ immediate: true },
 	);
 
+	watch(
+		() => workflowsStore.workflowId,
+		(newId) => {
+			if (newId === PLACEHOLDER_EMPTY_WORKFLOW_ID) {
+				resetExecutionData();
+			}
+		},
+	);
+
+	// Update workflow object on throttled state changes
+	// NOTE: don't turn the workflow object into a computed! It causes infinite update loop
+	watch(
+		throttledWorkflowData,
+		(data) => {
+			workflow.value = data
+				? new Workflow({ ...data, nodeTypes: workflowsStore.getNodeTypes() })
+				: undefined;
+		},
+		{ immediate: true },
+	);
+
 	return {
-		execution: computed(() => execData.value),
+		execution: computed(() => throttledState.value?.response),
 		entries,
 		hasChat,
 		latestNodeNameById,

@@ -9,19 +9,22 @@ import { useI18n } from '@n8n/i18n';
 import { useToast } from '@/composables/useToast';
 import { useMessage } from '@/composables/useMessage';
 import { EnterpriseEditionFeature, MODAL_CONFIRM, VIEWS } from '@/constants';
-import { getResourcePermissions } from '@/permissions';
+import { getResourcePermissions } from '@n8n/permissions';
 import { useSettingsStore } from '@/stores/settings.store';
 import { useWorkflowsStore } from '@/stores/workflows.store';
-import { ElDropdown, ElDropdownItem, ElDropdownMenu } from 'element-plus';
 import type { AnnotationVote, ExecutionSummary } from 'n8n-workflow';
 import { computed, ref } from 'vue';
-import { RouterLink, useRoute } from 'vue-router';
+import { useRoute } from 'vue-router';
 import { useExecutionsStore } from '@/stores/executions.store';
+
+import { ElDropdown, ElDropdownItem, ElDropdownMenu } from 'element-plus';
+import { N8nButton, N8nIconButton, N8nSpinner, N8nText } from '@n8n/design-system';
+import VoteButtons from '@/components/executions/workflow/VoteButtons.vue';
 
 type RetryDropdownRef = InstanceType<typeof ElDropdown>;
 
 const props = defineProps<{
-	execution: ExecutionSummary;
+	execution?: ExecutionSummary;
 }>();
 
 const emit = defineEmits<{
@@ -45,6 +48,7 @@ const workflowPermissions = computed(
 	() => getResourcePermissions(workflowsStore.getWorkflowById(workflowId.value)?.scopes).workflow,
 );
 const executionId = computed(() => route.params.executionId as string);
+const nodeId = computed(() => route.params.nodeId as string);
 const executionUIDetails = computed<IExecutionUIData | null>(() =>
 	props.execution ? executionHelpers.getUIDetails(props.execution) : null,
 );
@@ -108,7 +112,9 @@ async function onDeleteExecution(): Promise<void> {
 }
 
 function handleRetryClick(command: string) {
-	emit('retryExecution', { execution: props.execution, command });
+	if (props.execution) {
+		emit('retryExecution', { execution: props.execution, command });
+	}
 }
 
 function handleStopClick() {
@@ -229,7 +235,7 @@ const onVoteClick = async (voteValue: AnnotationVote) => {
 						| ID#{{ execution.id }}
 					</N8nText>
 				</div>
-				<div :class="$style.executionDetailsRetry" v-if="execution.mode === 'retry'">
+				<div v-if="execution.mode === 'retry'" :class="$style.executionDetailsRetry">
 					<N8nText color="text-base" size="small">
 						{{ locale.baseText('executionDetails.retry') }}
 						<RouterLink
@@ -288,7 +294,7 @@ const onVoteClick = async (voteValue: AnnotationVote) => {
 							type="tertiary"
 							:title="locale.baseText('executionsList.retryExecution')"
 							:disabled="!workflowPermissions.update"
-							icon="redo"
+							icon="redo-2"
 							data-test-id="execution-preview-retry-button"
 							@blur="onRetryButtonBlur"
 						/>
@@ -306,14 +312,14 @@ const onVoteClick = async (voteValue: AnnotationVote) => {
 				</ElDropdown>
 
 				<WorkflowExecutionAnnotationPanel
-					:execution="activeExecution"
 					v-if="isAnnotationEnabled && activeExecution"
+					:execution="activeExecution"
 				/>
 
 				<N8nIconButton
 					:title="locale.baseText('executionDetails.deleteExecution')"
 					:disabled="!workflowPermissions.update"
-					icon="trash"
+					icon="trash-2"
 					size="medium"
 					type="tertiary"
 					data-test-id="execution-preview-delete-button"
@@ -327,6 +333,7 @@ const onVoteClick = async (voteValue: AnnotationVote) => {
 			loader-type="spinner"
 			:execution-id="executionId"
 			:execution-mode="execution?.mode || ''"
+			:node-id="nodeId"
 		/>
 	</div>
 </template>
@@ -340,7 +347,7 @@ const onVoteClick = async (voteValue: AnnotationVote) => {
 
 .executionDetails {
 	position: absolute;
-	padding: var(--spacing-m);
+	padding: var(--spacing--md);
 	width: 100%;
 	display: flex;
 	justify-content: space-between;
@@ -361,13 +368,13 @@ const onVoteClick = async (voteValue: AnnotationVote) => {
 .executionDetailsLeft {
 	display: flex;
 	flex-direction: column;
-	gap: var(--spacing-5xs);
+	gap: var(--spacing--5xs);
 }
 
 .executionTitle {
 	display: flex;
 	align-items: center;
-	gap: var(--spacing-3xs);
+	gap: var(--spacing--3xs);
 }
 
 .voteButtons {
@@ -384,16 +391,16 @@ const onVoteClick = async (voteValue: AnnotationVote) => {
 
 .running,
 .spinner {
-	color: var(--color-warning);
+	color: var(--color--warning);
 }
 .waiting {
-	color: var(--color-secondary);
+	color: var(--color--secondary);
 }
 .success {
-	color: var(--color-success);
+	color: var(--color--success);
 }
 .error {
-	color: var(--color-danger);
+	color: var(--color--danger);
 }
 
 .newInfo,
@@ -401,27 +408,27 @@ const onVoteClick = async (voteValue: AnnotationVote) => {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
-	margin-top: var(--spacing-4xl);
+	margin-top: var(--spacing--4xl);
 }
 
 .newMessage,
 .runningMessage {
 	width: 240px;
-	margin-top: var(--spacing-l);
+	margin-top: var(--spacing--lg);
 	text-align: center;
 }
 
 .debugLink {
 	a > span {
 		display: block;
-		padding: var(--button-padding-vertical, var(--spacing-xs))
-			var(--button-padding-horizontal, var(--spacing-m));
+		padding: var(--button-padding-vertical, var(--spacing--xs))
+			var(--button-padding-horizontal, var(--spacing--md));
 	}
 }
 
 .actions {
 	display: flex;
-	gap: var(--spacing-2xs);
+	gap: var(--spacing--2xs);
 }
 
 .highlightDataButton {
@@ -434,7 +441,7 @@ const onVoteClick = async (voteValue: AnnotationVote) => {
 }
 
 .highlightDataButtonOpen {
-	color: var(--color-primary);
+	color: var(--color--primary);
 	background-color: var(--color-button-secondary-hover-background);
 	border-color: var(--color-button-secondary-hover-active-focus-border);
 }
