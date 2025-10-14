@@ -153,10 +153,10 @@ function scrollToBottom() {
 }
 
 watch(
-	chatMessages,
-	async (messages) => {
+	[chatMessages, () => chatStore.isResponding],
+	async ([messages, isResponding]) => {
 		// Check if the last message is user and scroll to bottom of the chat
-		if (scrollOnNewMessage.value && messages.length > 0) {
+		if (!isResponding && scrollOnNewMessage.value && messages.length > 0) {
 			// Wait for DOM updates before scrolling
 			await nextTick();
 			// Check if viewport is available after nextTick
@@ -165,7 +165,7 @@ watch(
 			}
 		}
 	},
-	{ immediate: true, deep: true },
+	{ immediate: true },
 );
 
 // TODO: fix duplicate requests

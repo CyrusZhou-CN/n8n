@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { N8nIcon, N8nText } from '@n8n/design-system';
+import { N8nIcon, N8nInput, N8nText } from '@n8n/design-system';
 import { ref, useTemplateRef } from 'vue';
 
 const { disabled, sessionId } = defineProps<{
@@ -19,6 +19,23 @@ function onAttach() {}
 
 function onMic() {}
 
+function handleSubmitForm() {
+	const trimmed = message.value.trim();
+
+	if (trimmed) {
+		emit('submit', trimmed);
+	}
+}
+
+function handleKeydownTextarea(e: KeyboardEvent) {
+	const trimmed = message.value.trim();
+
+	if (e.key === 'Enter' && !e.shiftKey && trimmed) {
+		e.preventDefault();
+		emit('submit', trimmed);
+	}
+}
+
 defineExpose({
 	focus: () => inputRef.value?.focus(),
 	setText: (text: string) => {
@@ -28,17 +45,18 @@ defineExpose({
 </script>
 
 <template>
-	<form :class="$style.prompt" @submit.prevent="emit('submit', message)">
+	<form :class="$style.prompt" @submit.prevent="handleSubmitForm">
 		<div :class="$style.inputWrap">
-			<input
+			<N8nInput
 				ref="inputRef"
+				size="xlarge"
 				v-model="message"
 				:class="$style.input"
-				type="text"
+				type="textarea"
 				:placeholder="placeholder"
 				autocomplete="off"
-				autofocus
-				:disabled="disabled"
+				:autosize="{ minRows: 1, maxRows: 4 }"
+				@keydown="handleKeydownTextarea"
 			/>
 
 			<div :class="$style.actions">
@@ -60,9 +78,13 @@ defineExpose({
 				>
 					<N8nIcon icon="mic" width="20" height="20" />
 				</button>
-				<button :class="$style.sendBtn" type="submit" :disabled="disabled || !message.trim()">
-					<span v-if="!disabled">Send</span>
-					<span v-else>…</span>
+				<button
+					:class="$style.sendBtn"
+					type="submit"
+					:disabled="disabled || !message.trim()"
+					label="Send"
+				>
+					<N8nIcon icon="arrow-up" :size="16" />
 				</button>
 			</div>
 		</div>
@@ -92,27 +114,21 @@ defineExpose({
 }
 
 .input {
-	flex: 1;
-	font: inherit;
-	padding: 14px 112px 14px 14px;
-	border: 1px solid var(--color--foreground);
-	background: var(--color--background--light-2);
-	color: var(--color--text--shade-1);
-	border-radius: 16px;
-	outline: none;
-}
-
-.input:focus {
-	border-color: var(--color--primary);
-	box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
+	& textarea {
+		font: inherit;
+		line-height: 1.5em;
+		border-radius: 16px !important;
+		resize: none;
+		padding: 16px;
+	}
 }
 
 /* Right-side actions */
 .actions {
 	position: absolute;
-	right: 8px;
-	top: 50%;
-	transform: translateY(-50%);
+	right: 0;
+	bottom: 0;
+	padding: var(--spacing--xs);
 	display: flex;
 	align-items: center;
 	gap: 6px;
@@ -136,14 +152,17 @@ defineExpose({
 }
 
 .sendBtn {
+	width: 32px;
 	height: 32px;
-	padding: 0 10px;
 	border-radius: 10px;
 	border: none;
 	background: var(--color--primary);
 	color: #fff;
 	font-weight: 600;
 	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: center;
 }
 
 .sendBtn:disabled {

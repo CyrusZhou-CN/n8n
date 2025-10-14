@@ -158,8 +158,9 @@ export const useChatStore = defineStore(CHAT_STORE, () => {
 		// addAssistantMessages(response.messages);
 	}
 
-	function onStreamDone() {
+	async function onStreamDone() {
 		streamingMessageId.value = undefined;
+		await fetchSessions(); // update the conversation list
 	}
 
 	// eslint-disable-next-line @typescript-eslint/no-unused-vars
