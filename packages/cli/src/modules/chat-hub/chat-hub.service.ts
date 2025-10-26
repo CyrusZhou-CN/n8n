@@ -47,6 +47,18 @@ import {
 } from 'n8n-workflow';
 import { v4 as uuidv4 } from 'uuid';
 
+import { ActiveExecutions } from '@/active-executions';
+import { CredentialsFinderService } from '@/credentials/credentials-finder.service';
+import { BadRequestError } from '@/errors/response-errors/bad-request.error';
+import { ForbiddenError } from '@/errors/response-errors/forbidden.error';
+import { NotFoundError } from '@/errors/response-errors/not-found.error';
+import { ExecutionService } from '@/executions/execution.service';
+import { DynamicNodeParametersService } from '@/services/dynamic-node-parameters.service';
+import { getBase } from '@/workflow-execute-additional-data';
+import { WorkflowExecutionService } from '@/workflows/workflow-execution.service';
+import { WorkflowFinderService } from '@/workflows/workflow-finder.service';
+import { WorkflowService } from '@/workflows/workflow.service';
+
 import type { ChatHubMessage } from './chat-hub-message.entity';
 import { CONVERSATION_TITLE_GENERATION_PROMPT } from './chat-hub.constants';
 import type {
@@ -60,18 +72,6 @@ import { ChatHubMessageRepository } from './chat-message.repository';
 import { ChatHubSessionRepository } from './chat-session.repository';
 import { getMaxContextWindowTokens } from './context-limits';
 import { interceptResponseWrites, createStructuredChunkAggregator } from './stream-capturer';
-
-import { ActiveExecutions } from '@/active-executions';
-import { CredentialsFinderService } from '@/credentials/credentials-finder.service';
-import { BadRequestError } from '@/errors/response-errors/bad-request.error';
-import { ForbiddenError } from '@/errors/response-errors/forbidden.error';
-import { NotFoundError } from '@/errors/response-errors/not-found.error';
-import { ExecutionService } from '@/executions/execution.service';
-import { DynamicNodeParametersService } from '@/services/dynamic-node-parameters.service';
-import { getBase } from '@/workflow-execute-additional-data';
-import { WorkflowExecutionService } from '@/workflows/workflow-execution.service';
-import { WorkflowFinderService } from '@/workflows/workflow-finder.service';
-import { WorkflowService } from '@/workflows/workflow.service';
 
 const providerNodeTypeMapping: Record<ChatHubLLMProvider, INodeTypeNameVersion> = {
 	openai: {
@@ -487,15 +487,15 @@ export class ChatHubService {
 			);
 		});
 
-		try {
-			await this.executeChatWorkflow(res, user, workflow, sessionId, messageId, selectedModel);
-		} finally {
-			if (provider !== 'n8n') {
-				// TODO: If we don't wait for a bit then workflow insights query might fail
-				await new Promise((resolve) => setTimeout(resolve, 3000));
-				await this.deleteChatWorkflow(workflow.workflowData.id);
-			}
-		}
+		await this.executeChatWorkflowWithCleanup(
+			res,
+			user,
+			workflow,
+			sessionId,
+			messageId,
+			selectedModel,
+			provider,
+		);
 	}
 
 	async editMessage(res: Response, user: User, payload: EditMessagePayload) {
@@ -567,13 +567,15 @@ export class ChatHubService {
 			return;
 		}
 
-		try {
-			await this.executeChatWorkflow(res, user, workflow, sessionId, messageId, selectedModel);
-		} finally {
-			if (provider !== 'n8n') {
-				await this.deleteChatWorkflow(workflow.workflowData.id);
-			}
-		}
+		await this.executeChatWorkflowWithCleanup(
+			res,
+			user,
+			workflow,
+			sessionId,
+			messageId,
+			selectedModel,
+			provider,
+		);
 	}
 
 	async regenerateAIMessage(res: Response, user: User, payload: RegenerateMessagePayload) {
@@ -651,21 +653,16 @@ export class ChatHubService {
 				};
 			});
 
-		try {
-			await this.executeChatWorkflow(
-				res,
-				user,
-				workflow,
-				sessionId,
-				previousMessageId,
-				selectedModel,
-				retryOfMessageId,
-			);
-		} finally {
-			if (provider !== 'n8n') {
-				await this.deleteChatWorkflow(workflow.workflowData.id);
-			}
-		}
+		await this.executeChatWorkflowWithCleanup(
+			res,
+			user,
+			workflow,
+			sessionId,
+			previousMessageId,
+			selectedModel,
+			provider,
+			retryOfMessageId,
+		);
 	}
 
 	private async prepareBaseChatWorkflow(
@@ -852,34 +849,19 @@ export class ChatHubService {
 				});
 			},
 			onError: async (message, _errorText) => {
-				// if (executionId) {
-				// 	const execution = await this.executionRepository.findWithUnflattenedData(executionId, [
-				// 		workflowData.id,
-				// 	]);
-				// 	if (!execution) {
-				// 		throw new OperationalError(`Could not find execution with ID ${executionId}`);
-				// 	}
-
-				// 	if (execution.status === 'canceled') {
-				// 		await this.messageRepository.updateChatMessage(message.id, {
-				// 			content: message.content,
-				// 			status: 'cancelled',
-				// 		});
-				// 		return;
-				// 	}
-				// }
-
 				await this.messageRepository.updateChatMessage(message.id, {
 					content: message.content,
 				});
 
+				// When messages are cancelled we mark them as cancelled already on `stopGeneration`
 				const savedMessage = await this.messageRepository.getOneById(message.id, sessionId, []);
 				if (savedMessage?.status === 'cancelled') {
 					return;
 				}
 
+				// Otherwise mark them as errored
 				await this.messageRepository.updateChatMessage(message.id, {
-					content: message.status,
+					status: 'error',
 				});
 			},
 		});
@@ -942,16 +924,7 @@ export class ChatHubService {
 				}
 			} catch (error: unknown) {
 				if (error instanceof ManualExecutionCancelledError) {
-					// const execution = await this.executionRepository.findWithUnflattenedData(executionId, [
-					// 	workflowData.id,
-					// ]);
-					// if (!execution) {
-					// 	throw new OperationalError(`Could not find execution with ID ${executionId}`);
-					// }
-
-					// if (execution.status === 'canceled') {
 					return;
-					// }
 				}
 
 				throw error;
@@ -981,6 +954,39 @@ export class ChatHubService {
 				this.logger.error(`Error during chat workflow execution: ${error}`);
 			}
 			throw error;
+		}
+	}
+
+	private async executeChatWorkflowWithCleanup(
+		res: Response,
+		user: User,
+		workflow: {
+			workflowData: IWorkflowBase;
+			triggerToStartFrom: { name: string; data?: ITaskData };
+		},
+		sessionId: ChatSessionId,
+		previousMessageId: ChatMessageId,
+		selectedModel: ModelWithCredentials,
+		provider: ChatHubProvider,
+		retryOfMessageId: ChatMessageId | null = null,
+	) {
+		try {
+			await this.executeChatWorkflow(
+				res,
+				user,
+				workflow,
+				sessionId,
+				previousMessageId,
+				selectedModel,
+				retryOfMessageId,
+			);
+		} finally {
+			if (provider !== 'n8n') {
+				// TODO: If we don't wait for a bit then workflow insights query might fail.
+				// Once/if we add the new workflow flag to keep these WFs around this wouldn't be needed.
+				await new Promise((resolve) => setTimeout(resolve, 3000));
+				await this.deleteChatWorkflow(workflow.workflowData.id);
+			}
 		}
 	}
 
