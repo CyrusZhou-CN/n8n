@@ -52,6 +52,7 @@ const inputRef = useTemplateRef('inputRef');
 const sessionId = computed<string>(() =>
 	typeof route.params.id === 'string' ? route.params.id : uuidv4(),
 );
+const isResponding = computed(() => chatStore.isResponding(sessionId.value));
 const isNewSession = computed(() => sessionId.value !== route.params.id);
 const scrollableRef = useTemplateRef('scrollable');
 const scrollContainerRef = computed(() => scrollableRef.value?.parentElement ?? null);
@@ -175,14 +176,15 @@ watch(
 			return;
 		}
 
-		if (lastMessageId !== chatStore.currentMessage.messageId) {
-			scrollToBottom(chatStore.currentMessage.messageId !== undefined);
+		const currentMessage = chatStore.lastMessage(sessionId.value);
+		if (lastMessageId !== currentMessage?.id) {
+			scrollToBottom(currentMessage !== null);
 			return;
 		}
 
 		const message = chatStore
 			.getActiveMessages(sessionId.value)
-			.find((message) => message.id === lastMessageId);
+			.find((m) => m.id === lastMessageId);
 
 		if (message?.previousMessageId) {
 			// Scroll to user's prompt when the message is being generated
@@ -247,7 +249,7 @@ onMounted(async () => {
 function onSubmit(message: string) {
 	if (
 		!message.trim() ||
-		chatStore.isResponding ||
+		isResponding.value ||
 		!selectedModel.value ||
 		isMissingSelectedCredential.value
 	) {
@@ -290,7 +292,7 @@ function handleCancelEditMessage() {
 
 function handleEditMessage(message: ChatHubMessageDto) {
 	if (
-		chatStore.isResponding ||
+		chatStore.isResponding(message.sessionId) ||
 		!['human', 'ai'].includes(message.type) ||
 		!selectedModel.value ||
 		isMissingSelectedCredential.value
@@ -322,7 +324,7 @@ function handleEditMessage(message: ChatHubMessageDto) {
 
 function handleRegenerateMessage(message: ChatHubMessageDto) {
 	if (
-		chatStore.isResponding ||
+		chatStore.isResponding(message.sessionId) ||
 		message.type !== 'ai' ||
 		!selectedModel.value ||
 		isMissingSelectedCredential.value
@@ -425,7 +427,7 @@ function handleCreateNewCredential(provider: ChatHubLLMProvider) {
 						:message="message"
 						:compact="isMobileDevice"
 						:is-editing="editingMessageId === message.id"
-						:is-streaming="chatStore.currentMessage.messageId === message.id"
+						:is-streaming="message.status === 'running'"
 						:min-height="
 							didSubmitInCurrentSession &&
 							message.type === 'ai' &&
@@ -456,7 +458,7 @@ function handleCreateNewCredential(provider: ChatHubLLMProvider) {
 						v-if="isInitialized"
 						ref="inputRef"
 						:class="$style.prompt"
-						:is-responding="chatStore.isResponding"
+						:is-responding="isResponding"
 						:selected-model="selectedModel"
 						:is-missing-credentials="isMissingSelectedCredential"
 						@submit="onSubmit"
