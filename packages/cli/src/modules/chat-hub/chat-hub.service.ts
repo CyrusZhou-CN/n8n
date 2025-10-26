@@ -491,6 +491,8 @@ export class ChatHubService {
 			await this.executeChatWorkflow(res, user, workflow, sessionId, messageId, selectedModel);
 		} finally {
 			if (provider !== 'n8n') {
+				// TODO: If we don't wait for a bit then workflow insights query might fail
+				await new Promise((resolve) => setTimeout(resolve, 1000));
 				await this.deleteChatWorkflow(workflow.workflowData.id);
 			}
 		}
@@ -849,9 +851,24 @@ export class ChatHubService {
 					status: message.status,
 				});
 			},
-			onError: async (message, errorText) => {
-				// TODO: If message gets cancelled how to handle this?
-				// Maybe read the execution at this point and check its status?
+			onError: async (message, _errorText) => {
+				if (executionId) {
+					const execution = await this.executionRepository.findWithUnflattenedData(executionId, [
+						workflowData.id,
+					]);
+					if (!execution) {
+						throw new OperationalError(`Could not find execution with ID ${executionId}`);
+					}
+
+					if (execution.status === 'canceled') {
+						await this.messageRepository.updateChatMessage(message.id, {
+							content: message.content,
+							status: 'cancelled',
+						});
+						return;
+					}
+				}
+
 				await this.messageRepository.updateChatMessage(message.id, {
 					content: message.content,
 					status: message.status,
@@ -871,11 +888,8 @@ export class ChatHubService {
 			}
 
 			const message = aggregator.ingest(chunk);
-			const content = chunk.type === 'error' ? message.content : chunk.content;
-
 			const enriched: EnrichedStructuredChunk = {
 				...chunk,
-				content,
 				metadata: {
 					...chunk.metadata,
 					messageId: message.id,
@@ -920,16 +934,16 @@ export class ChatHubService {
 				}
 			} catch (error: unknown) {
 				if (error instanceof ManualExecutionCancelledError) {
-					const execution = await this.executionRepository.findWithUnflattenedData(executionId, [
-						workflowData.id,
-					]);
-					if (!execution) {
-						throw new OperationalError(`Could not find execution with ID ${executionId}`);
-					}
+					// const execution = await this.executionRepository.findWithUnflattenedData(executionId, [
+					// 	workflowData.id,
+					// ]);
+					// if (!execution) {
+					// 	throw new OperationalError(`Could not find execution with ID ${executionId}`);
+					// }
 
-					if (execution.status === 'canceled') {
-						return;
-					}
+					// if (execution.status === 'canceled') {
+					return;
+					// }
 				}
 
 				throw error;

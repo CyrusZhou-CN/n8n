@@ -175,8 +175,8 @@ watch(
 			return;
 		}
 
-		if (lastMessageId !== chatStore.streamingMessageId) {
-			scrollToBottom(chatStore.streamingMessageId !== undefined);
+		if (lastMessageId !== chatStore.currentMessage.messageId) {
+			scrollToBottom(chatStore.currentMessage.messageId !== undefined);
 			return;
 		}
 
@@ -425,7 +425,7 @@ function handleCreateNewCredential(provider: ChatHubLLMProvider) {
 						:message="message"
 						:compact="isMobileDevice"
 						:is-editing="editingMessageId === message.id"
-						:is-streaming="chatStore.streamingMessageId === message.id"
+						:is-streaming="chatStore.currentMessage.messageId === message.id"
 						:min-height="
 							didSubmitInCurrentSession &&
 							message.type === 'ai' &&

@@ -141,9 +141,10 @@ export function createStructuredChunkAggregator(
 		const message = ensureMessage(key);
 		message.status = 'error';
 		message.updatedAt = new Date();
-		message.content =
-			(message.content ? message.content + '\n\n' : '') +
-			(typeof content === 'string' ? content : 'Error: Unknown error occurred');
+		if (typeof content === 'string') {
+			message.content = (message.content ? message.content + '\n\n' : '') + content;
+		}
+
 		activeByKey.delete(key);
 		onError?.(message, content);
 		return message;

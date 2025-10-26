@@ -24,6 +24,7 @@ import type {
 	ChatSessionId,
 	ChatHubMessageDto,
 	EnrichedStructuredChunk,
+	ChatHubMessageStatus,
 } from '@n8n/api-types';
 import type { CredentialsMap, ChatMessage, ChatConversation } from './chat.types';
 import { retry } from '@n8n/utils/retry';
@@ -32,10 +33,16 @@ export const useChatStore = defineStore(CHAT_STORE, () => {
 	const rootStore = useRootStore();
 	const models = ref<ChatModelsResponse>();
 	const loadingModels = ref(false);
-	const streamingMessageId = ref<string>();
+	const currentMessage = ref<{
+		status: ChatHubMessageStatus;
+		messageId: ChatMessageId | null;
+	}>({
+		status: 'success',
+		messageId: null,
+	});
 	const sessions = ref<ChatHubSessionDto[]>([]);
 
-	const isResponding = computed(() => streamingMessageId.value !== undefined);
+	const isResponding = computed(() => currentMessage.value.status === 'running');
 
 	const conversationsBySession = ref<Map<ChatSessionId, ChatConversation>>(new Map());
 
@@ -248,8 +255,10 @@ export const useChatStore = defineStore(CHAT_STORE, () => {
 		messageId: ChatMessageId,
 		previousMessageId: ChatMessageId | null,
 		retryOfMessageId: ChatMessageId | null,
+		status: ChatHubMessageStatus = 'running',
 	) {
-		streamingMessageId.value = messageId;
+		currentMessage.value.messageId = messageId;
+		currentMessage.value.status = status;
 
 		addMessage(sessionId, {
 			id: messageId,
@@ -261,7 +270,7 @@ export const useChatStore = defineStore(CHAT_STORE, () => {
 			model: null,
 			workflowId: null,
 			executionId: null,
-			status: 'success',
+			status,
 			createdAt: new Date().toISOString(),
 			updatedAt: new Date().toISOString(),
 			previousMessageId,
@@ -277,7 +286,8 @@ export const useChatStore = defineStore(CHAT_STORE, () => {
 	}
 
 	function onEndMessage() {
-		streamingMessageId.value = undefined;
+		currentMessage.value.messageId = null;
+		currentMessage.value.status = 'success';
 	}
 
 	function onStreamMessage(sessionId: string, message: EnrichedStructuredChunk) {
@@ -294,18 +304,26 @@ export const useChatStore = defineStore(CHAT_STORE, () => {
 				onEndMessage();
 				break;
 			case 'error':
-				if (streamingMessageId.value !== messageId) {
-					onBeginMessage(sessionId, messageId, previousMessageId, retryOfMessageId);
+				// Ignore errors after cancellation
+				if (currentMessage.value.status === 'cancelled') {
+					return;
 				}
 
-				onChunk(sessionId, messageId, message.content ?? 'Unknown error');
-				onEndMessage();
+				// TODO: Create these messages in error state
+				if (currentMessage.value.messageId !== messageId) {
+					onBeginMessage(sessionId, messageId, previousMessageId, retryOfMessageId, 'error');
+				}
+
+				onChunk(sessionId, messageId, message.content ?? '');
+
+				currentMessage.value.messageId = null;
+				currentMessage.value.status = 'error';
 				break;
 		}
 	}
 
 	async function onStreamDone(sessionId: string) {
-		streamingMessageId.value = undefined;
+		currentMessage.value.messageId = null;
 
 		// wait up to 3 seconds until conversation title is generated
 		await retry(
@@ -324,7 +342,7 @@ export const useChatStore = defineStore(CHAT_STORE, () => {
 
 	// eslint-disable-next-line @typescript-eslint/no-unused-vars
 	function onStreamError(_e: Error) {
-		streamingMessageId.value = undefined;
+		currentMessage.value.messageId = null;
 	}
 
 	function sendMessage(
@@ -456,9 +474,10 @@ export const useChatStore = defineStore(CHAT_STORE, () => {
 	}
 
 	async function stopStreamingMessage(sessionId: ChatSessionId) {
-		if (streamingMessageId.value) {
-			const messageId = streamingMessageId.value;
-			onEndMessage();
+		if (currentMessage.value.messageId) {
+			const messageId = currentMessage.value.messageId;
+			currentMessage.value.status = 'cancelled';
+			currentMessage.value.messageId = null;
 			await stopGenerationApi(rootStore.restApiContext, sessionId, messageId);
 		}
 	}
@@ -495,7 +514,7 @@ export const useChatStore = defineStore(CHAT_STORE, () => {
 		conversationsBySession,
 		loadingModels,
 		isResponding,
-		streamingMessageId,
+		currentMessage,
 		fetchChatModels,
 		sendMessage,
 		editMessage,
