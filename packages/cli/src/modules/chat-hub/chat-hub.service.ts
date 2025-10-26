@@ -982,7 +982,8 @@ export class ChatHubService {
 			);
 		} finally {
 			if (provider !== 'n8n') {
-				// TODO: If we don't wait for a bit then workflow insights query might fail.
+				// TODO: If we don't wait for a bit then a followup workflow insights query
+				// that happens after executions might fail to find the workflow.
 				// Once/if we add the new workflow flag to keep these WFs around this wouldn't be needed.
 				await new Promise((resolve) => setTimeout(resolve, 3000));
 				await this.deleteChatWorkflow(workflow.workflowData.id);
@@ -1055,20 +1056,23 @@ export class ChatHubService {
 					mode: 'insert',
 					insertMode: 'override',
 					messages: {
-						messageValues: history.map((message) => {
-							const typeMap: Record<string, MessageRecord['type']> = {
-								human: 'user',
-								ai: 'ai',
-								system: 'system',
-							};
+						messageValues: history
+							// Empty messages can't be restored by the memory manager
+							.filter((message) => message.content.length > 0)
+							.map((message) => {
+								const typeMap: Record<string, MessageRecord['type']> = {
+									human: 'user',
+									ai: 'ai',
+									system: 'system',
+								};
 
-							// TODO: Tool messages ?
-							return {
-								type: typeMap[message.type] || 'system',
-								message: message.content,
-								hideFromUI: false,
-							};
-						}),
+								// TODO: Tool messages etc?
+								return {
+									type: typeMap[message.type] || 'system',
+									message: message.content,
+									hideFromUI: false,
+								};
+							}),
 					},
 				},
 				type: '@n8n/n8n-nodes-langchain.memoryManager',
