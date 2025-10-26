@@ -849,19 +849,35 @@ export class ChatHubService {
 				});
 			},
 			onError: async (message, _errorText) => {
-				await this.messageRepository.updateChatMessage(message.id, {
-					content: message.content,
-				});
+				await this.messageRepository.manager.transaction(async (trx) => {
+					// Always update the content to whatever was generated so far, including the possible error text
+					await this.messageRepository.updateChatMessage(
+						message.id,
+						{
+							content: message.content,
+						},
+						trx,
+					);
 
-				// When messages are cancelled we mark them as cancelled already on `stopGeneration`
-				const savedMessage = await this.messageRepository.getOneById(message.id, sessionId, []);
-				if (savedMessage?.status === 'cancelled') {
-					return;
-				}
+					// When messages are cancelled they're already marked cancelled on `stopGeneration`
+					const savedMessage = await this.messageRepository.getOneById(
+						message.id,
+						sessionId,
+						[],
+						trx,
+					);
+					if (savedMessage?.status === 'cancelled') {
+						return;
+					}
 
-				// Otherwise mark them as errored
-				await this.messageRepository.updateChatMessage(message.id, {
-					status: 'error',
+					// Otherwise mark them as errored
+					await this.messageRepository.updateChatMessage(
+						message.id,
+						{
+							status: 'error',
+						},
+						trx,
+					);
 				});
 			},
 		});

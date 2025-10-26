@@ -15,10 +15,10 @@ import { RestController, Post, Body, GlobalScope, Get, Delete, Param } from '@n8
 import type { Response } from 'express';
 import { strict as assert } from 'node:assert';
 
+import { ResponseError } from '@/errors/response-errors/abstract/response.error';
+
 import { ChatHubService } from './chat-hub.service';
 import { ChatModelsRequestDto } from './dto/chat-models-request.dto';
-
-import { ResponseError } from '@/errors/response-errors/abstract/response.error';
 
 @RestController('/chat')
 export class ChatHubController {
