@@ -73,6 +73,8 @@ export const useAssistantStore = defineStore(STORES.ASSISTANT, () => {
 	const workflowDataStale = ref<boolean>(true);
 	const workflowExecutionDataStale = ref<boolean>(true);
 
+	const allowSendingParameterData = computed(() => settings.settings.ai.allowSendingActualData);
+
 	const assistantMessages = computed(() =>
 		chatMessages.value.filter((msg) => msg.role === 'assistant'),
 	);
@@ -356,7 +358,9 @@ export const useAssistantStore = defineStore(STORES.ASSISTANT, () => {
 					}
 				: undefined,
 			currentWorkflow: workflowDataStale.value
-				? assistantHelpers.simplifyWorkflowForAssistant(workflowsStore.workflow)
+				? assistantHelpers.simplifyWorkflowForAssistant(workflowsStore.workflow, {
+						allowSendingParameterData: allowSendingParameterData.value,
+					})
 				: undefined,
 			executionData:
 				workflowExecutionDataStale.value && executionResult
