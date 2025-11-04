@@ -1,4 +1,8 @@
-import { describe, it } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { createPinia, setActivePinia } from 'pinia';
+import { useChatStore } from './chat.store';
+import { createMockModelsResponse } from './__test__/data';
+import * as chatApi from './chat.api';
 
 /**
  * chat.store.ts Tests
@@ -12,9 +16,30 @@ import { describe, it } from 'vitest';
  * - API interactions (mocked)
  */
 
+vi.mock('./chat.api');
+
 describe('useChatStore', () => {
+	let pinia: ReturnType<typeof createPinia>;
+	let chatStore: ReturnType<typeof useChatStore>;
+
+	beforeEach(() => {
+		pinia = createPinia();
+		setActivePinia(pinia);
+		chatStore = useChatStore();
+	});
+
 	describe('Agent operations', () => {
-		it.todo('fetches agents, stores them, and sets agentsReady flag');
+		it('fetches agents, stores them, and sets agentsReady flag', async () => {
+			const mockResponse = createMockModelsResponse();
+			vi.mocked(chatApi.fetchChatModelsApi).mockResolvedValue(mockResponse);
+
+			expect(chatStore.agentsReady).toBe(false);
+
+			await chatStore.fetchAgents({});
+
+			expect(chatStore.agentsReady).toBe(true);
+			expect(chatStore.agents).toEqual(mockResponse);
+		});
 		it.todo('creates custom agent and adds to agents list');
 		it.todo('updates custom agent and updates in agents list');
 		it.todo('deletes custom agent and removes from agents list');

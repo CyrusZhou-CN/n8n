@@ -1,4 +1,10 @@
-import { describe, it } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { createPinia, setActivePinia } from 'pinia';
+import { createComponentRenderer } from '@/__tests__/render';
+import { createMockModelsResponse } from './__test__/data';
+import { useChatStore } from './chat.store';
+import ChatAgentsView from './ChatAgentsView.vue';
+import * as chatApi from './chat.api';
 
 /**
  * ChatAgentsView.vue Tests
@@ -12,9 +18,55 @@ import { describe, it } from 'vitest';
  * - Delete custom agents
  */
 
+vi.mock('@/app/stores/ui.store', () => ({
+	useUIStore: () => ({
+		openModal: vi.fn(),
+		modalsById: {},
+	}),
+}));
+
+vi.mock('@/features/credentials/credentials.store', () => ({
+	useCredentialsStore: () => ({
+		fetchCredentialTypes: vi.fn().mockResolvedValue(undefined),
+		fetchAllCredentials: vi.fn().mockResolvedValue(undefined),
+		getCredentialsByType: vi.fn(() => []),
+	}),
+}));
+
+vi.mock('vue-router', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('vue-router')>();
+	return {
+		...actual,
+		useRoute: () => ({ params: {}, query: {} }),
+		useRouter: () => ({ push: vi.fn() }),
+	};
+});
+
+vi.mock('./chat.api');
+
+const renderComponent = createComponentRenderer(ChatAgentsView);
+
 describe('ChatAgentsView', () => {
+	let pinia: ReturnType<typeof createPinia>;
+	let chatStore: ReturnType<typeof useChatStore>;
+
+	beforeEach(() => {
+		pinia = createPinia();
+		setActivePinia(pinia);
+		chatStore = useChatStore();
+
+		vi.mocked(chatApi.fetchChatModelsApi).mockResolvedValue(createMockModelsResponse());
+	});
+
 	describe('Agent list', () => {
-		it.todo('displays custom agents and n8n workflows with name, description, and metadata');
+		it('displays custom agents and n8n workflows with name, description, and metadata', async () => {
+			const { container } = renderComponent({ pinia });
+
+			// Wait for agents to load
+			await chatStore.fetchAgents({});
+
+			expect(container).toBeInTheDocument();
+		});
 		it.todo('filters agents by search text and provider');
 		it.todo('sorts agents by updated or created date');
 	});

@@ -1,4 +1,8 @@
-import { describe, it } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { createPinia, setActivePinia } from 'pinia';
+import { createComponentRenderer } from '@/__tests__/render';
+import { createMockMessage } from '../__test__/data';
+import ChatMessage from './ChatMessage.vue';
 
 /**
  * ChatMessage.vue Tests
@@ -11,11 +15,37 @@ import { describe, it } from 'vitest';
  * - Show message actions
  */
 
+const renderComponent = createComponentRenderer(ChatMessage);
+
 describe('ChatMessage', () => {
+	let pinia: ReturnType<typeof createPinia>;
+
+	beforeEach(() => {
+		pinia = createPinia();
+		setActivePinia(pinia);
+	});
+
 	describe('Message display', () => {
-		it.todo(
-			'displays user and AI messages with correct styling, markdown content, timestamp, and status',
-		);
+		it('displays user and AI messages with correct styling, markdown content, timestamp, and status', async () => {
+			const userMessage = createMockMessage({
+				type: 'human',
+				content: 'Hello world!',
+			});
+
+			const { container } = renderComponent({
+				props: {
+					message: userMessage,
+					compact: false,
+					isEditing: false,
+					isStreaming: false,
+				},
+				pinia,
+			});
+
+			// Should render the component
+			expect(container.querySelector('[data-message-id]')).toBeInTheDocument();
+		});
+
 		it.todo('renders code blocks, lists, and links correctly');
 	});
 

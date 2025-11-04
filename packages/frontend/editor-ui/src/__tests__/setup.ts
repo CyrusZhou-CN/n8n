@@ -147,4 +147,41 @@ Object.defineProperty(HTMLElement.prototype, 'scrollTo', {
 	value: vi.fn(),
 });
 
+// Mock Speech API for useSpeechSynthesis from @vueuse/core
+class SpeechSynthesisUtterance {
+	text = '';
+	lang = '';
+	voice = null;
+	volume = 1;
+	rate = 1;
+	pitch = 1;
+	onstart = null;
+	onend = null;
+	onerror = null;
+	onpause = null;
+	onresume = null;
+	onboundary = null;
+	onmark = null;
+}
+
+Object.defineProperty(window, 'SpeechSynthesisUtterance', {
+	writable: true,
+	value: SpeechSynthesisUtterance,
+});
+
+Object.defineProperty(window, 'speechSynthesis', {
+	writable: true,
+	value: {
+		speak: vi.fn(),
+		cancel: vi.fn(),
+		pause: vi.fn(),
+		resume: vi.fn(),
+		getVoices: vi.fn(() => []),
+		speaking: false,
+		pending: false,
+		paused: false,
+		onvoiceschanged: null,
+	},
+});
+
 loadLanguage('en', englishBaseText as LocaleMessages);

@@ -16,11 +16,13 @@ Your mission is to bring code coverage under the chatHub folder to above 95%.
 ## Coding guide
 
 - DO NOT mock modules such as Vue components and stores. Exception: `chat.api.ts`
+- For each module you want to mock, ask for permission first
+- If browser API is missing, add to `packages/frontend/editor-ui/src/__tests__/setup.ts` (not in individual test files)
 - Test files are collocated with source files (not in `__test__/` directory)
 - For utility function tests, use function references in describe() calls: `describe(functionName, () => {})`
 - Define common helpers and test data in `__test__/data.ts`
 - Selector priority:
-	1. Based on accessibility features, e.g. `getByRole`
+	1. Based on accessibility features, e.g. `getByRole`, `getByText`
 	2. Based on test ID `getByTestId`
 	3. `querySelector`
 - Do assert:
@@ -68,17 +70,26 @@ To see coverage for the chatHub folder specifically, look for the coverage outpu
 
 ### Current Status
 
+**Overall Coverage (baseline with 1 test per module):**
+- Statements: 33.32% (5746/17241)
+- Branches: 68.31% (276/404)
+- Functions: 8.65% (80/924)
+- Lines: 33.32% (5746/17241)
+
+**Test Files Status:**
+
 Test files are collocated with their source modules in the `chatHub/` directory.
 
-#### Completed Tests
-- ✅ `chat.utils.test.ts` - 12 tests passing (utility functions)
+| Module | Tests Passing | Tests Todo | Status |
+|--------|--------------|------------|--------|
+| `chat.utils.test.ts` | 12 | 0 | ✅ Complete |
+| `chat.store.test.ts` | 1 | 14 | 🟡 Started |
+| `ChatView.test.ts` | 1 | 12 | 🟡 Started |
+| `ChatAgentsView.test.ts` | 1 | 10 | 🟡 Started |
+| `ChatMessage.test.ts` | 1 | 4 | 🟡 Started |
+| `ChatPrompt.test.ts` | 1 | 7 | 🟡 Started |
+| `ChatSidebar.test.ts` | 1 | 3 | 🟡 Started |
+| `ModelSelector.test.ts` | 1 | 3 | 🟡 Started |
+| `CredentialSelectorModal.test.ts` | 1 | 2 | 🟡 Started |
 
-#### Pending Tests
-- ⏳ `ChatView.test.ts` - 11 todo tests
-- ⏳ `ChatAgentsView.test.ts` - 8 todo tests
-- ⏳ `ChatSidebar.test.ts` - 4 todo tests
-- ⏳ `ChatMessage.test.ts` - 5 todo tests
-- ⏳ `ChatPrompt.test.ts` - 8 todo tests
-- ⏳ `chat.store.test.ts` - 10 todo tests
-- ⏳ `ModelSelector.test.ts` - 4 todo tests
-- ⏳ `CredentialSelectorModal.test.ts` - 3 todo tests
+**Total:** 20 tests passing | 55 tests todo

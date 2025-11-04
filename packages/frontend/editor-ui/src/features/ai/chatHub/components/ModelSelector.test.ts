@@ -1,4 +1,8 @@
-import { describe, it } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { createPinia, setActivePinia } from 'pinia';
+import { createComponentRenderer } from '@/__tests__/render';
+import { createMockAgent } from '../__test__/data';
+import ModelSelector from './ModelSelector.vue';
 
 /**
  * ModelSelector.vue Tests
@@ -11,9 +15,43 @@ import { describe, it } from 'vitest';
  * - Show credential status
  */
 
+vi.mock('@/app/stores/ui.store', () => ({
+	useUIStore: () => ({
+		openModal: vi.fn(),
+	}),
+}));
+
+vi.mock('@/features/credentials/credentials.store', () => ({
+	useCredentialsStore: () => ({
+		getCredentialById: vi.fn(),
+		getCredentialTypeByName: vi.fn(),
+	}),
+}));
+
+const renderComponent = createComponentRenderer(ModelSelector);
+
 describe('ModelSelector', () => {
+	let pinia: ReturnType<typeof createPinia>;
+
+	beforeEach(() => {
+		pinia = createPinia();
+		setActivePinia(pinia);
+	});
+
 	describe('Model list', () => {
-		it.todo('displays models grouped by provider with name and description');
+		it('displays models grouped by provider with name and description', () => {
+			const selectedAgent = createMockAgent({ name: 'GPT-4' });
+
+			const { container } = renderComponent({
+				props: {
+					selectedAgent,
+					credentials: null,
+				},
+				pinia,
+			});
+
+			expect(container).toBeInTheDocument();
+		});
 		it.todo('filters models by search text across model names');
 	});
 

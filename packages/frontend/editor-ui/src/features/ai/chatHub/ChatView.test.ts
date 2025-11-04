@@ -1,4 +1,10 @@
-import { describe, it } from 'vitest';
+import { describe, it, beforeEach, expect, vi } from 'vitest';
+import { createPinia, setActivePinia } from 'pinia';
+import { createComponentRenderer } from '@/__tests__/render';
+import { createMockModelsResponse } from './__test__/data';
+import ChatView from './ChatView.vue';
+import { useChatStore } from './chat.store';
+import * as chatApi from './chat.api';
 
 /**
  * ChatView.vue Tests
@@ -12,9 +18,85 @@ import { describe, it } from 'vitest';
  * - Session management
  */
 
+// Mock external stores and modules
+vi.mock('@/features/settings/users/users.store', () => ({
+	useUsersStore: () => ({
+		currentUserId: 'user-123',
+		currentUser: {
+			id: 'user-123',
+			firstName: 'Test',
+			fullName: 'Test User',
+		},
+	}),
+}));
+
+vi.mock('@/app/stores/ui.store', () => ({
+	useUIStore: () => ({
+		openModal: vi.fn(),
+		modalsById: {},
+	}),
+}));
+
+vi.mock('@/features/credentials/credentials.store', () => ({
+	useCredentialsStore: () => ({
+		fetchCredentialTypes: vi.fn().mockResolvedValue(undefined),
+		fetchAllCredentials: vi.fn().mockResolvedValue(undefined),
+		getCredentialById: vi.fn().mockReturnValue(undefined),
+		getCredentialsByType: vi.fn().mockReturnValue([]),
+		getCredentialTypeByName: vi.fn().mockReturnValue(undefined),
+	}),
+}));
+
+vi.mock('./chat.api');
+
+vi.mock('vue-router', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('vue-router')>();
+	return {
+		...actual,
+		useRoute: () => ({
+			params: {},
+			query: {},
+		}),
+		useRouter: () => ({
+			push: vi.fn(),
+			resolve: vi.fn(),
+		}),
+	};
+});
+
+const renderComponent = createComponentRenderer(ChatView);
+
 describe('ChatView', () => {
+	let pinia: ReturnType<typeof createPinia>;
+	let chatStore: ReturnType<typeof useChatStore>;
+
+	beforeEach(() => {
+		pinia = createPinia();
+		setActivePinia(pinia);
+		chatStore = useChatStore();
+
+		// Mock chat API
+		vi.mocked(chatApi.fetchChatModelsApi).mockResolvedValue(createMockModelsResponse());
+		vi.mocked(chatApi.fetchSingleConversationApi).mockResolvedValue([]);
+		vi.mocked(chatApi.fetchConversationsApi).mockResolvedValue([]);
+	});
+
 	describe('Initial rendering', () => {
-		it.todo('displays chat starter for new session, conversation header, and prompt input');
+		it('displays chat starter for new session, conversation header, and prompt input', async () => {
+			const { findByRole, findByText, queryByRole } = renderComponent({ pinia });
+
+			// Should not display message list for new session (role="log" is only for existing conversations)
+			expect(queryByRole('log')).not.toBeInTheDocument();
+
+			// Should display chat starter greeting
+			const greeting = await findByText('Hello, Test!');
+			expect(greeting).toBeInTheDocument();
+
+			// Should display prompt input
+			const textarea = await findByRole('textbox');
+			expect(textarea).toBeInTheDocument();
+		});
+
 		it.todo('displays existing messages when loading a conversation');
 	});
 

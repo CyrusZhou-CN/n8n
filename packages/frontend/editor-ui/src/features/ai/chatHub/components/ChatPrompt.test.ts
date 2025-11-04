@@ -1,4 +1,8 @@
-import { describe, it } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { createPinia, setActivePinia } from 'pinia';
+import { createComponentRenderer } from '@/__tests__/render';
+import { createMockAgent } from '../__test__/data';
+import ChatPrompt from './ChatPrompt.vue';
 
 /**
  * ChatPrompt.vue Tests
@@ -12,9 +16,34 @@ import { describe, it } from 'vitest';
  * - Model selection trigger
  */
 
+const renderComponent = createComponentRenderer(ChatPrompt);
+
 describe('ChatPrompt', () => {
+	let pinia: ReturnType<typeof createPinia>;
+
+	beforeEach(() => {
+		pinia = createPinia();
+		setActivePinia(pinia);
+	});
+
 	describe('Input display', () => {
-		it.todo('displays textarea with dynamic placeholder based on selected model');
+		it('displays textarea with dynamic placeholder based on selected model', async () => {
+			const selectedModel = createMockAgent({ name: 'GPT-4' });
+
+			const { findByRole } = renderComponent({
+				props: {
+					isResponding: false,
+					isNewSession: true,
+					selectedModel,
+					isMissingCredentials: false,
+				},
+				pinia,
+			});
+
+			const textarea = await findByRole('textbox');
+			expect(textarea).toBeInTheDocument();
+			expect(textarea).toHaveAttribute('placeholder', 'Message GPT-4...');
+		});
 	});
 
 	describe('Message submission', () => {
