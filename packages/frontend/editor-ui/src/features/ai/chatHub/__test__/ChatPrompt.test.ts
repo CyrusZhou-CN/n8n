@@ -13,50 +13,32 @@ import { describe, it } from 'vitest';
  */
 
 describe('ChatPrompt', () => {
-	describe('Input rendering', () => {
-		it.todo('displays textarea for message input');
-		it.todo('displays placeholder based on selected model');
-		it.todo('displays "Select a model" placeholder when no model selected');
-		it.todo('displays model name in placeholder when model is selected');
+	describe('Input display', () => {
+		it.todo('displays textarea with dynamic placeholder based on selected model');
 	});
 
 	describe('Message submission', () => {
-		it.todo('submits message when clicking send button');
-		it.todo('submits message when pressing Enter (without Shift)');
+		it.todo(
+			'submits message on Enter key or button click, trims whitespace, clears input, and does not submit empty messages',
+		);
 		it.todo('adds new line when pressing Shift+Enter');
-		it.todo('does not submit empty messages');
-		it.todo('trims whitespace from messages before submitting');
-		it.todo('clears input after successful submission');
 	});
 
 	describe('Voice input', () => {
-		it.todo('displays microphone button');
-		it.todo('starts voice recognition when clicking microphone button');
-		it.todo('stops voice recognition when clicking microphone button again');
-		it.todo('updates textarea with recognized speech');
-		it.todo('shows error toast when microphone access is denied');
-		it.todo('shows warning when no speech is detected');
+		it.todo(
+			'toggles voice recognition on microphone button click and updates textarea with speech',
+		);
+		it.todo('shows error toast when microphone access is denied or no speech detected');
 	});
 
 	describe('Stop generation', () => {
-		it.todo('displays stop button when AI is responding');
-		it.todo('emits stop event when clicking stop button');
-		it.todo('hides stop button when not responding');
+		it.todo('shows stop button when AI is responding and emits stop event when clicked');
 	});
 
-	describe('Model selection', () => {
-		it.todo('emits selectModel event when clicking model selector trigger');
-		it.todo('disables input when no model is selected');
-	});
-
-	describe('Credentials handling', () => {
-		it.todo('displays credential setup button when credentials are missing');
-		it.todo('emits setCredentials event when clicking credential button');
-	});
-
-	describe('Input state', () => {
-		it.todo('disables input while AI is responding');
-		it.todo('enables input after AI response completes');
-		it.todo('maintains focus on textarea after submission');
+	describe('Model and credentials', () => {
+		it.todo('disables input when no model selected and emits selectModel event');
+		it.todo(
+			'displays credential setup button when credentials missing and emits setCredentials event',
+		);
 	});
 });

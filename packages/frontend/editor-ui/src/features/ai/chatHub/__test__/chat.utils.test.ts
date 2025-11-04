@@ -18,69 +18,53 @@ import { describe, it } from 'vitest';
 
 describe('chat.utils', () => {
 	describe('findOneFromModelsResponse', () => {
-		it.todo('returns first available model from response');
-		it.todo('returns undefined when no models available');
+		it.todo('returns first available model or undefined when none available');
 	});
 
 	describe('getRelativeDate', () => {
-		it.todo('returns "Today" for today\'s date');
-		it.todo('returns "Yesterday" for yesterday\'s date');
-		it.todo('returns "This week" for dates within last 7 days');
-		it.todo('returns "Older" for dates older than 7 days');
+		it.todo('returns correct relative date category (Today, Yesterday, This week, Older)');
 	});
 
 	describe('groupConversationsByDate', () => {
-		it.todo('groups sessions by relative date categories');
-		it.todo('orders groups as Today, Yesterday, This week, Older');
-		it.todo('sorts sessions within each group by most recent first');
-		it.todo('excludes empty groups');
+		it.todo(
+			'groups sessions by relative date, orders by Today/Yesterday/This week/Older, and sorts within groups by most recent',
+		);
 	});
 
 	describe('getAgentRoute', () => {
-		it.todo('returns route with workflowId query for n8n agents');
-		it.todo('returns route with agentId query for custom agents');
-		it.todo('returns base route for other providers');
+		it.todo(
+			'returns route with workflowId for n8n, agentId for custom-agent, or base route for others',
+		);
 	});
 
 	describe('flattenModel and unflattenModel', () => {
-		it.todo('flattens n8n model correctly');
-		it.todo('flattens custom-agent model correctly');
-		it.todo('flattens LLM provider model correctly');
-		it.todo('unflattens n8n model correctly');
-		it.todo('unflattens custom-agent model correctly');
-		it.todo('unflattens LLM provider model correctly');
-		it.todo('returns null for invalid models');
+		it.todo('flattens models (n8n, custom-agent, LLM provider) correctly');
+		it.todo(
+			'unflattens models (n8n, custom-agent, LLM provider) correctly and returns null for invalid',
+		);
 	});
 
 	describe('filterAndSortAgents', () => {
-		it.todo('filters agents by search text (case insensitive)');
-		it.todo('filters agents by provider');
-		it.todo('sorts agents by updatedAt date (newest first)');
-		it.todo('sorts agents by createdAt date (newest first)');
-		it.todo('places agents without dates at the end');
+		it.todo('filters agents by search text (case insensitive) and provider');
+		it.todo(
+			'sorts agents by date (updatedAt or createdAt) with newest first and dateless items at end',
+		);
 	});
 
 	describe('stringifyModel and fromStringToModel', () => {
-		it.todo('stringifies n8n model with workflowId');
-		it.todo('stringifies custom-agent model with agentId');
-		it.todo('stringifies LLM provider model with model name');
-		it.todo('parses stringified n8n model back correctly');
-		it.todo('parses stringified custom-agent model back correctly');
-		it.todo('parses stringified LLM provider model back correctly');
-		it.todo('returns undefined for invalid string format');
+		it.todo('stringifies models (n8n, custom-agent, LLM provider) with correct format');
+		it.todo('parses stringified models back correctly and returns undefined for invalid format');
 	});
 
 	describe('isMatchedAgent', () => {
-		it.todo('returns true when n8n agent matches by workflowId');
-		it.todo('returns true when custom agent matches by agentId');
-		it.todo('returns true when LLM provider agent matches by provider and model');
-		it.todo('returns false when agents do not match');
+		it.todo(
+			'returns true when agent matches by workflowId, agentId, or provider+model, false otherwise',
+		);
 	});
 
 	describe('createAiMessageFromStreamingState', () => {
-		it.todo('creates AI message with correct default values');
-		it.todo('includes streaming state data when provided');
-		it.todo('sets status to "running"');
-		it.todo('includes model information when available');
+		it.todo(
+			'creates AI message with default values, streaming state data, "running" status, and model info',
+		);
 	});
 });

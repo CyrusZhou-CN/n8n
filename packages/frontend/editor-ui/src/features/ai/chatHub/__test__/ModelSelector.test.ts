@@ -12,30 +12,18 @@ import { describe, it } from 'vitest';
  */
 
 describe('ModelSelector', () => {
-	describe('Model list display', () => {
-		it.todo('displays models grouped by provider');
-		it.todo('displays model name and description');
-		it.todo('displays custom agents section');
-		it.todo('displays n8n workflows section');
-		it.todo('displays LLM provider models sections');
+	describe('Model list', () => {
+		it.todo('displays models grouped by provider with name and description');
+		it.todo('filters models by search text across model names');
 	});
 
 	describe('Model selection', () => {
-		it.todo('emits modelChange event when selecting a model');
-		it.todo('highlights currently selected model');
-		it.todo('allows changing to different model');
+		it.todo('emits modelChange event, highlights selected model, and allows changing models');
 	});
 
-	describe('Search and filtering', () => {
-		it.todo('filters models by search text');
-		it.todo('searches across model names');
-		it.todo('updates displayed models when search changes');
-	});
-
-	describe('Credentials display', () => {
-		it.todo('shows credential indicator for models requiring credentials');
-		it.todo('shows when credentials are configured');
-		it.todo('shows when credentials are missing');
-		it.todo('allows selecting credentials for a model');
+	describe('Credentials', () => {
+		it.todo(
+			'shows credential indicator and status (configured/missing) for models requiring credentials',
+		);
 	});
 });

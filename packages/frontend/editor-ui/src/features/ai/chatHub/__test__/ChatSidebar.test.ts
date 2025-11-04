@@ -13,29 +13,18 @@ import { describe, it } from 'vitest';
  */
 
 describe('ChatSidebar', () => {
-	describe('Session list display', () => {
-		it.todo('displays sessions grouped by date (Today, Yesterday, This week, Older)');
-		it.todo('displays session titles');
-		it.todo('displays session preview/last message');
+	describe('Session list', () => {
+		it.todo('displays sessions grouped by date with titles and highlights active session');
 		it.todo('sorts sessions by most recent first within each group');
-		it.todo('highlights currently active session');
 	});
 
 	describe('Navigation', () => {
-		it.todo('navigates to session when clicking on a session item');
-		it.todo('navigates to agents view when clicking agents link');
-		it.todo('creates new chat when clicking new chat button');
+		it.todo(
+			'navigates to session, agents view, or creates new chat when clicking respective items',
+		);
 	});
 
-	describe('Session management', () => {
-		it.todo('displays delete button on hover for each session');
-		it.todo('shows confirmation dialog when deleting a session');
-		it.todo('calls deleteConversation API when user confirms deletion');
-		it.todo('removes session from list after deletion');
-	});
-
-	describe('Mobile behavior', () => {
-		it.todo('can be collapsed on mobile');
-		it.todo('collapses automatically after navigation on mobile');
+	describe('Session deletion', () => {
+		it.todo('confirms deletion, calls deleteConversation API, and removes session from list');
 	});
 });
