@@ -70,11 +70,11 @@ To see coverage for the chatHub folder specifically, look for the coverage outpu
 
 ### Current Status
 
-**Overall Coverage (baseline with 1 test per module):**
-- Statements: 33.32% (5746/17241)
-- Branches: 68.31% (276/404)
-- Functions: 8.65% (80/924)
-- Lines: 33.32% (5746/17241)
+**Overall Coverage:**
+- Statements: 34.53% (5955/17241)
+- Branches: 68.43% (310/453)
+- Functions: 9.4% (87/925)
+- Lines: 34.53% (5955/17241)
 
 **Test Files Status:**
 
@@ -83,8 +83,8 @@ Test files are collocated with their source modules in the `chatHub/` directory.
 | Module | Tests Passing | Tests Todo | Status |
 |--------|--------------|------------|--------|
 | `chat.utils.test.ts` | 12 | 0 | ✅ Complete |
-| `chat.store.test.ts` | 1 | 14 | 🟡 Started |
-| `ChatView.test.ts` | 1 | 12 | 🟡 Started |
+| `chat.store.test.ts` | 2 | 13 | 🟡 In Progress |
+| `ChatView.test.ts` | 2 | 11 | 🟡 In Progress |
 | `ChatAgentsView.test.ts` | 1 | 10 | 🟡 Started |
 | `ChatMessage.test.ts` | 1 | 4 | 🟡 Started |
 | `ChatPrompt.test.ts` | 1 | 7 | 🟡 Started |
@@ -92,4 +92,16 @@ Test files are collocated with their source modules in the `chatHub/` directory.
 | `ModelSelector.test.ts` | 1 | 3 | 🟡 Started |
 | `CredentialSelectorModal.test.ts` | 1 | 2 | 🟡 Started |
 
-**Total:** 20 tests passing | 55 tests todo
+**Total:** 22 tests passing | 53 tests todo
+
+## Progress Notes
+
+### 2025-11-04
+- **Coverage Progress**: 33.33% → 34.53% statements (+1.2%)
+- **Tests Added**: Message sending test in `ChatView.test.ts`
+  - Verifies user can send a message
+  - Verifies input clears after submission
+  - Verifies message is added to store
+  - Verifies API is called with correct parameters
+- **Key Testing Pattern**: Use custom-agent or n8n workflow agents to bypass credential requirements
+- **Next Steps**: Continue implementing component tests focusing on user interactions

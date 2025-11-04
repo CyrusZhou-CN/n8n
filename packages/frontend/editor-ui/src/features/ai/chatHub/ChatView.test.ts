@@ -5,6 +5,7 @@ import { createMockModelsResponse } from './__test__/data';
 import ChatView from './ChatView.vue';
 import { useChatStore } from './chat.store';
 import * as chatApi from './chat.api';
+import userEvent from '@testing-library/user-event';
 
 /**
  * ChatView.vue Tests
@@ -49,14 +50,17 @@ vi.mock('@/features/credentials/credentials.store', () => ({
 
 vi.mock('./chat.api');
 
+// Global mock - can be overridden in specific tests
+const mockRoute = {
+	params: {},
+	query: {},
+};
+
 vi.mock('vue-router', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('vue-router')>();
 	return {
 		...actual,
-		useRoute: () => ({
-			params: {},
-			query: {},
-		}),
+		useRoute: () => mockRoute,
 		useRouter: () => ({
 			push: vi.fn(),
 			resolve: vi.fn(),
@@ -107,9 +111,88 @@ describe('ChatView', () => {
 	});
 
 	describe('Sending messages', () => {
-		it.todo(
-			'sends message, calls API, creates new session if needed, and adds user message immediately',
-		);
+		it('sends message, calls API, creates new session if needed, and adds user message immediately', async () => {
+			const user = userEvent.setup();
+
+			// Mock agents with a custom-agent (doesn't require credentials)
+			const mockModelsResponse = createMockModelsResponse({
+				'custom-agent': {
+					models: [
+						{
+							name: 'Test Custom Agent',
+							description: 'A test custom agent',
+							model: { provider: 'custom-agent', agentId: 'agent-123' },
+							updatedAt: '2024-01-15T12:00:00Z',
+						},
+					],
+				},
+			});
+			vi.mocked(chatApi.fetchChatModelsApi).mockResolvedValue(mockModelsResponse);
+
+			// Set route query parameter to select the custom agent
+			mockRoute.query = { agentId: 'agent-123' };
+
+			// Mock sendMessage API to return a stream-like response
+			vi.mocked(chatApi.sendMessageApi).mockImplementation(async () => {
+				return {
+					sessionId: 'new-session-id',
+					messageId: 'ai-message-id',
+					promptId: 'prompt-id',
+					stream: (async function* () {
+						yield { type: 'chunk', data: { content: 'Hello! ' } };
+						yield { type: 'chunk', data: { content: 'How can I help?' } };
+					})(),
+				} as any;
+			});
+
+			const { findByRole, findByText } = renderComponent({ pinia });
+
+			// Wait for component to be ready and agents loaded
+			await chatStore.fetchAgents({});
+
+			// Find the textarea
+			const textarea = (await findByRole('textbox')) as HTMLTextAreaElement;
+			expect(textarea).toBeInTheDocument();
+
+			// Type a message and press Enter
+			await user.click(textarea);
+			await user.type(textarea, 'Hello, AI!{Enter}');
+
+			// Wait a bit for the store action to process and re-render
+			await new Promise((resolve) => setTimeout(resolve, 200));
+
+			// Verify the input was cleared (basic interaction test)
+			expect(textarea.value).toBe('');
+
+			// Verify sendMessageApi was called
+			expect(chatApi.sendMessageApi).toHaveBeenCalled();
+
+			// Get the session ID that was actually used
+			const sendMessageCall = vi.mocked(chatApi.sendMessageApi).mock.calls[0];
+			const actualSessionId = sendMessageCall?.[1]?.sessionId;
+
+			// Verify the message was added to the store
+			const messages = chatStore.getActiveMessages(actualSessionId);
+			expect(messages).toHaveLength(1);
+			expect(messages[0]).toMatchObject({
+				type: 'human',
+				content: 'Hello, AI!',
+			});
+
+			// Verify the sendMessageApi was called with correct parameters
+			expect(chatApi.sendMessageApi).toHaveBeenCalledWith(
+				expect.anything(), // restApiContext
+				expect.objectContaining({
+					message: 'Hello, AI!',
+					model: { provider: 'custom-agent', agentId: 'agent-123' },
+					sessionId: expect.any(String),
+					credentials: {},
+				}),
+				expect.any(Function), // onStreamMessage
+				expect.any(Function), // onStreamDone
+				expect.any(Function), // onStreamError
+			);
+		});
 		it.todo('adds optimistic AI message with "running" status and disables input');
 	});
 

@@ -46,7 +46,37 @@ describe('useChatStore', () => {
 	});
 
 	describe('Session operations', () => {
-		it.todo('fetches sessions and stores them in state');
+		it('fetches sessions and stores them in state', async () => {
+			const mockSessions = [
+				{
+					id: 'session-1',
+					title: 'Test Chat 1',
+					createdAt: '2024-01-15T12:00:00Z',
+					updatedAt: '2024-01-15T12:00:00Z',
+					provider: 'openai',
+					model: 'gpt-4',
+					workflowId: null,
+					agentId: null,
+				},
+				{
+					id: 'session-2',
+					title: 'Test Chat 2',
+					createdAt: '2024-01-14T12:00:00Z',
+					updatedAt: '2024-01-14T12:00:00Z',
+					provider: 'anthropic',
+					model: 'claude',
+					workflowId: null,
+					agentId: null,
+				},
+			];
+			vi.mocked(chatApi.fetchConversationsApi).mockResolvedValue(mockSessions);
+
+			await chatStore.fetchSessions();
+
+			expect(chatStore.sessions).toEqual(mockSessions);
+			expect(chatStore.sessions).toHaveLength(2);
+			expect(chatStore.sessionsReady).toBe(true);
+		});
 		it.todo('deletes session and removes from sessions list');
 		it.todo('updates session title');
 	});
