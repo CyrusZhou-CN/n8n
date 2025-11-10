@@ -113,7 +113,7 @@ const mcpToggleTooltip = computed(() => {
 });
 
 const isEligibleForMcp = computed(() => {
-	if (!workflow?.value) return false;
+	if (!workflow?.value?.active) return false;
 	return isEligibleForMcpAccess(workflow.value);
 });
 
