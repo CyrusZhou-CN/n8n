@@ -1759,6 +1759,7 @@
 	"oauth.consentView.description": "This will allow {clientName} to perform the following actions:",
 	"oauth.consentView.action.listWorkflows": "Get a list of your workflows",
 	"oauth.consentView.action.workflowDetails": "Get details for a specific workflow",
+	"oauth.consentView.action.executeWorkflows": "Execute workflows on your behalf",
 	"oauth.consentView.readMore": "Read more <a href='{docsUrl}' target='_blank'>here</a>",
 	"oauth.consentView.error.deny": "Error denying access",
 	"oauth.consentView.error.allow": "Error allowing access",
