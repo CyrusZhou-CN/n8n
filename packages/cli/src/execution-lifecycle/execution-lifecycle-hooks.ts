@@ -8,6 +8,7 @@ import type {
 	IWorkflowBase,
 	WorkflowExecuteMode,
 	IWorkflowExecutionDataProcess,
+	RelatedExecution,
 } from 'n8n-workflow';
 
 import { EventService } from '@/events/event.service';
@@ -261,6 +262,95 @@ function hookFunctionsPush(
 	});
 }
 
+/**
+ * Returns hook functions to push data to Editor-UI for sub-executions.
+ * When the sub-workflow is the same as the parent (same canvas), we use
+ * the parent's execution ID so the UI shows both executions on the same canvas.
+ */
+function hookFunctionsPushForSubExecution(
+	hooks: ExecutionLifecycleHooks,
+	{
+		pushRef,
+		executionId,
+		parentExecutionId,
+	}: {
+		pushRef: string;
+		executionId: string;
+		parentExecutionId?: string;
+	},
+) {
+	if (!pushRef) return;
+	const logger = Container.get(Logger);
+	const pushInstance = Container.get(Push);
+
+	// For node execution events, we send the sub-execution's own ID
+	// and include parentExecutionId so the frontend can fetch and merge data
+	hooks.addHandler('nodeExecuteBefore', function (nodeName, data) {
+		logger.debug(`Executing hook on node "${nodeName}" (hookFunctionsPushForSubExecution)`, {
+			executionId,
+			parentExecutionId,
+			pushRef,
+			workflowId: this.workflowData.id,
+		});
+
+		pushInstance.send(
+			{
+				type: 'nodeExecuteBefore',
+				data: { executionId, nodeName, data, parentExecutionId },
+			},
+			pushRef,
+		);
+	});
+
+	hooks.addHandler('nodeExecuteAfter', function (nodeName, data) {
+		logger.debug(`Executing hook on node "${nodeName}" (hookFunctionsPushForSubExecution)`, {
+			executionId,
+			parentExecutionId,
+			pushRef,
+			workflowId: this.workflowData.id,
+		});
+
+		const itemCountByConnectionType = getItemCountByConnectionType(data?.data);
+		const { data: _, ...taskData } = data;
+
+		pushInstance.send(
+			{
+				type: 'nodeExecuteAfter',
+				data: {
+					executionId,
+					nodeName,
+					itemCountByConnectionType,
+					data: taskData,
+					parentExecutionId,
+				},
+			},
+			pushRef,
+		);
+
+		const asBinary = true;
+		pushInstance.send(
+			{
+				type: 'nodeExecuteAfterData',
+				data: {
+					executionId,
+					nodeName,
+					itemCountByConnectionType,
+					data,
+					parentExecutionId,
+				},
+			},
+			pushRef,
+			asBinary,
+		);
+	});
+
+	// Note: We intentionally do NOT send workflowExecuteBefore/After events for sub-executions
+	// because:
+	// 1. executionStarted with parent's ID would conflict/reset the parent's execution state
+	// 2. The node execution events (nodeExecuteBefore/After) should be sufficient for UI updates
+	// 3. The UI should handle node events for the parent executionId without requiring a separate executionStarted
+}
+
 function hookFunctionsExternalHooks(hooks: ExecutionLifecycleHooks) {
 	const externalHooks = Container.get(ExternalHooks);
 	hooks.addHandler('workflowExecuteBefore', async function (workflow) {
@@ -481,6 +571,8 @@ export function getLifecycleHooksForSubExecutions(
 	executionId: string,
 	workflowData: IWorkflowBase,
 	userId?: string,
+	pushRef?: string,
+	parentExecution?: RelatedExecution,
 ): ExecutionLifecycleHooks {
 	const hooks = new ExecutionLifecycleHooks(mode, executionId, workflowData);
 	const saveSettings = toSaveSettings(workflowData.settings);
@@ -491,6 +583,17 @@ export function getLifecycleHooksForSubExecutions(
 	hookFunctionsSaveProgress(hooks, { saveSettings });
 	hookFunctionsStatistics(hooks);
 	hookFunctionsExternalHooks(hooks);
+
+	if (pushRef) {
+		// Check if this is a "same canvas" scenario where the sub-workflow is the same workflow as the parent
+		const isSameCanvas = parentExecution && parentExecution.workflowId === workflowData.id;
+
+		hookFunctionsPushForSubExecution(hooks, {
+			pushRef,
+			executionId,
+			parentExecutionId: isSameCanvas ? parentExecution.executionId : undefined,
+		});
+	}
 	return hooks;
 }
 
