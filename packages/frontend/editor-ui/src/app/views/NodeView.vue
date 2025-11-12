@@ -683,7 +683,8 @@ async function onClipboardPaste(plainTextData: string): Promise<void> {
 	if (
 		getNodeViewTab(route) !== MAIN_HEADER_TABS.WORKFLOW ||
 		!keyBindingsEnabled.value ||
-		!checkIfEditingIsAllowed()
+		!checkIfEditingIsAllowed() ||
+		isCanvasReadOnly.value
 	) {
 		return;
 	}
