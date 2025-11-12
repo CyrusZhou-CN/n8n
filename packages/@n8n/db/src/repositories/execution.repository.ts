@@ -1175,6 +1175,8 @@ export class ExecutionRepository extends Repository<ExecutionEntity> {
 					startedAt: MoreThanOrEqual(startedAt),
 					stoppedAt: LessThanOrEqual(stoppedAt),
 					executionData: {
+						// We do not have a direct relation between parent and sub-executions,
+						// This is a workaround to link them via executionData's parentExecutionId field
 						data: Like(`%"${parentExecutionId}"%`),
 					},
 				},
