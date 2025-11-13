@@ -2579,6 +2579,7 @@ export type WorkflowId = IWorkflowBase['id'];
 export interface IWorkflowBase {
 	id: string;
 	name: string;
+	description?: string | null;
 	active: boolean;
 	isArchived: boolean;
 	createdAt: Date;
