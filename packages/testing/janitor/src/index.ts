@@ -132,6 +132,12 @@ export {
 } from './core/tcr-executor.js';
 
 export {
+	resolveTestCommand,
+	buildTestCommand,
+	type ResolvedCommand,
+} from './utils/test-command.js';
+
+export {
 	diffFileMethods,
 	formatDiffConsole,
 	formatDiffJSON,
@@ -157,6 +163,8 @@ export {
 	formatImpactJSON,
 	formatTestList,
 	type ImpactResult,
+	type AnalyzeOptions,
+	type ResolutionStrategy,
 } from './core/impact-analyzer.js';
 
 export {

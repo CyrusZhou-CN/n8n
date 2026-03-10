@@ -2,12 +2,14 @@
  * TCR Executor - Test && Commit || Revert workflow
  */
 
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import * as path from 'node:path';
 import { Project } from 'ts-morph';
 
-import { diffFileMethods, type MethodChange } from './ast-diff-analyzer.js';
+import { type FileDiffResult, type MethodChange } from './ast-diff-analyzer.js';
 import { loadBaseline, filterNewViolations } from './baseline.js';
+import { extractDiffs } from './extract-diffs.js';
+import { ImpactAnalyzer } from './impact-analyzer.js';
 import { MethodUsageAnalyzer, type MethodUsageIndex } from './method-usage-analyzer.js';
 import { createProject } from './project-loader.js';
 import { RuleRunner } from './rule-runner.js';
@@ -27,7 +29,7 @@ import {
 } from '../utils/git-operations.js';
 import { createLogger, type Logger } from '../utils/logger.js';
 import { getRootDir } from '../utils/paths.js';
-import { buildTestCommand } from '../utils/test-command.js';
+import { buildTestCommand, resolveTestCommand } from '../utils/test-command.js';
 
 export interface TcrOptions {
 	baseRef?: string;
@@ -41,7 +43,13 @@ export interface TcrOptions {
 
 export interface TcrResult {
 	success: boolean;
-	failedStep?: 'rules' | 'typecheck' | 'tests' | 'diff-too-large' | 'baseline-modified';
+	failedStep?:
+		| 'rules'
+		| 'typecheck'
+		| 'tests'
+		| 'diff-too-large'
+		| 'baseline-modified'
+		| 'test-command-rejected';
 	changedFiles: string[];
 	changedMethods: MethodChange[];
 	affectedTests: string[];
@@ -82,6 +90,12 @@ export class TcrExecutor {
 
 		this.logger = createLogger({ verbose });
 
+		// Early validation: test command allowlist
+		const commandValidation = this.validateTestCommand(testCommand);
+		if (commandValidation) {
+			return this.buildResult({ ...commandValidation, durationMs: performance.now() - startTime });
+		}
+
 		const changedFiles = this.getChangedFiles(targetBranch);
 
 		// Validation: diff size
@@ -110,7 +124,8 @@ export class TcrExecutor {
 		this.logger.debugList(changedFiles);
 
 		// Analyze changed methods early (useful for understanding the change even if later checks fail)
-		const changedMethods = this.extractChangedMethods(changedFiles, baseRef);
+		const diffs = extractDiffs(changedFiles, baseRef);
+		const changedMethods = diffs.flatMap((d) => d.changedMethods);
 		this.logChangedMethods(changedMethods);
 
 		// Validation: rules
@@ -153,7 +168,7 @@ export class TcrExecutor {
 		this.logger.debug('\u2713 Typecheck passed');
 
 		// Find affected tests
-		const affectedTests = this.findAffectedTests(changedFiles, changedMethods);
+		const affectedTests = this.findAffectedTests(changedFiles, diffs);
 		this.logger.debug(`\nAffected tests: ${affectedTests.length}`);
 		this.logger.debugList(affectedTests);
 
@@ -226,6 +241,21 @@ export class TcrExecutor {
 
 	// --- Validation Methods ---
 
+	private validateTestCommand(testCommand?: string): Partial<TcrResult> | null {
+		try {
+			resolveTestCommand(testCommand);
+			return null;
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			this.logger.debug(`\n✗ Test command rejected: ${message}`);
+			return {
+				success: false,
+				failedStep: 'test-command-rejected',
+				action: 'dry-run',
+			};
+		}
+	}
+
 	private validateDiffSize(
 		changedFiles: string[],
 		maxDiffLines: number | undefined,
@@ -254,7 +284,7 @@ export class TcrExecutor {
 	private validateBaselineNotModified(changedFiles: string[]): Partial<TcrResult> | null {
 		// Check git status directly for baseline file (not relying on changedFiles which filters by .ts)
 		try {
-			const status = execSync('git status --porcelain', {
+			const status = execFileSync('git', ['status', '--porcelain'], {
 				cwd: this.root,
 				encoding: 'utf-8',
 			});
@@ -264,7 +294,14 @@ export class TcrExecutor {
 
 			if (!hasBaselineChange) return null;
 		} catch {
-			return null;
+			// Fail closed — git failure blocks commit rather than silently passing
+			this.logger.debug('\n[warning] Could not check baseline status (git failed)');
+			return {
+				success: false,
+				failedStep: 'baseline-modified',
+				changedFiles,
+				action: 'dry-run',
+			};
 		}
 
 		this.logger.debug('\n✗ Cannot commit baseline changes via TCR');
@@ -316,17 +353,6 @@ export class TcrExecutor {
 	}
 
 	// --- Method Analysis ---
-
-	private extractChangedMethods(changedFiles: string[], baseRef: string): MethodChange[] {
-		const changedMethods: MethodChange[] = [];
-		for (const file of changedFiles) {
-			if (file.endsWith('.ts') && !file.endsWith('.spec.ts')) {
-				const diff = diffFileMethods(file, baseRef);
-				changedMethods.push(...diff.changedMethods);
-			}
-		}
-		return changedMethods;
-	}
 
 	private logChangedMethods(changedMethods: MethodChange[]): void {
 		if (changedMethods.length === 0) return;
@@ -416,7 +442,7 @@ export class TcrExecutor {
 	private runTypecheck(): boolean {
 		try {
 			const stdio = this.logger.isVerbose() ? 'inherit' : 'pipe';
-			execSync('pnpm typecheck', { cwd: this.root, stdio });
+			execFileSync('pnpm', ['typecheck'], { cwd: this.root, stdio });
 			return true;
 		} catch {
 			return false;
@@ -427,38 +453,13 @@ export class TcrExecutor {
 		return gitGetChangedFiles({ targetBranch, scopeDir: this.root, extensions: ['.ts'] });
 	}
 
-	private findAffectedTests(changedFiles: string[], changedMethods: MethodChange[]): string[] {
-		const affectedTests = new Set<string>();
-
-		const changedTestFiles = this.getChangedTestFiles(changedFiles);
-		const methodIndex = this.getMethodUsageIndex();
-
-		// Find tests using modified/removed methods
-		this.addTestsUsingMethods(
-			changedMethods.filter((m) => m.changeType !== 'added'),
-			methodIndex,
-			affectedTests,
-		);
-
-		// Find tests using newly added methods
-		this.addTestsUsingNewMethods(
-			changedMethods.filter((m) => m.changeType === 'added'),
-			changedTestFiles,
-			affectedTests,
-		);
-
-		// Include directly changed test files
-		for (const testFile of changedTestFiles) {
-			affectedTests.add(testFile);
-		}
-
-		return Array.from(affectedTests).sort((a, b) => a.localeCompare(b));
-	}
-
-	private getChangedTestFiles(changedFiles: string[]): string[] {
-		return changedFiles
-			.filter((f) => f.endsWith('.spec.ts'))
-			.map((f) => path.relative(this.root, f));
+	private findAffectedTests(changedFiles: string[], diffs: FileDiffResult[]): string[] {
+		const analyzer = new ImpactAnalyzer(this.project);
+		const result = analyzer.analyze(changedFiles, {
+			diffs,
+			methodUsageIndex: this.getMethodUsageIndex(),
+		});
+		return result.affectedTests;
 	}
 
 	private getMethodUsageIndex(): MethodUsageIndex {
@@ -469,52 +470,15 @@ export class TcrExecutor {
 		return this.methodUsageIndex;
 	}
 
-	private addTestsUsingMethods(
-		methods: MethodChange[],
-		methodIndex: MethodUsageIndex,
-		affectedTests: Set<string>,
-	): void {
-		for (const change of methods) {
-			const key = `${change.className}.${change.methodName}`;
-			const usages = methodIndex.methods[key] ?? [];
-			for (const usage of usages) {
-				affectedTests.add(usage.testFile);
-			}
-		}
-	}
-
-	private addTestsUsingNewMethods(
-		addedMethods: MethodChange[],
-		changedTestFiles: string[],
-		affectedTests: Set<string>,
-	): void {
-		if (addedMethods.length === 0 || changedTestFiles.length === 0) return;
-
-		for (const testFile of changedTestFiles) {
-			const fullPath = path.join(this.root, testFile);
-			const sourceFile = this.project.getSourceFile(fullPath);
-			if (!sourceFile) continue;
-
-			const content = sourceFile.getFullText();
-			for (const method of addedMethods) {
-				const methodPattern = new RegExp(`\\.${method.methodName}\\s*\\(`);
-				if (methodPattern.test(content)) {
-					affectedTests.add(testFile);
-					break;
-				}
-			}
-		}
-	}
-
 	private runTests(testFiles: string[], testCommand?: string): boolean {
 		this.logger.debug(`\nRunning ${testFiles.length} test file(s)...`);
 
 		try {
 			const cmd = buildTestCommand(testFiles, testCommand);
-			this.logger.debug(`Command: ${cmd}`);
+			this.logger.debug(`Command: ${cmd.bin} ${cmd.args.join(' ')}`);
 
 			const stdio = this.logger.isVerbose() ? 'inherit' : 'pipe';
-			execSync(cmd, { cwd: this.root, stdio });
+			execFileSync(cmd.bin, cmd.args, { cwd: this.root, stdio });
 			return true;
 		} catch {
 			return false;
@@ -545,6 +509,9 @@ export function formatTcrResultConsole(result: TcrResult, verbose = false): void
 	}
 	if (result.failedStep === 'baseline-modified') {
 		console.log('  Baseline: ✗ Modified (baseline updates must be done manually)');
+	}
+	if (result.failedStep === 'test-command-rejected') {
+		console.log('  Test command: ✗ Rejected (not in allowlist)');
 	}
 	console.log(
 		`  Rules: ${result.ruleViolations === 0 ? '✓ Passed' : `✗ ${result.ruleViolations} violation(s)`}`,
