@@ -10,6 +10,7 @@ import type { CredentialsService } from '@/credentials/credentials.service';
 import type { NodeTypes } from '@/node-types';
 import type { UrlService } from '@/services/url.service';
 import type { Telemetry } from '@/telemetry';
+import { resolveNodeWebhookIds } from '@/workflow-helpers';
 import type { WorkflowFinderService } from '@/workflows/workflow-finder.service';
 import type { WorkflowService } from '@/workflows/workflow.service';
 
@@ -104,7 +105,12 @@ export const createUpdateWorkflowTool = (
 
 		try {
 			// Fetch the workflow to check if it's available in MCP
-			await getMcpWorkflow(workflowId, user, ['workflow:update'], workflowFinderService);
+			const existingWorkflow = await getMcpWorkflow(
+				workflowId,
+				user,
+				['workflow:update'],
+				workflowFinderService,
+			);
 
 			const { ParseValidateHandler, stripImportStatements } = await import(
 				'@n8n/ai-workflow-builder'
@@ -124,6 +130,22 @@ export const createUpdateWorkflowTool = (
 				pinData: workflowJson.pinData,
 				meta: { ...workflowJson.meta, aiBuilderAssisted: true },
 			});
+
+			resolveNodeWebhookIds(workflowUpdateData, nodeTypes);
+
+			// Preserve user-configured credentials from the existing workflow.
+			// Match nodes by name + type so that auto-assign skips them.
+			const existingCredsByNode = new Map(
+				existingWorkflow.nodes.map((n) => [n.name, { type: n.type, credentials: n.credentials }]),
+			);
+			for (const node of workflowUpdateData.nodes) {
+				if (!node.credentials) {
+					const existing = existingCredsByNode.get(node.name);
+					if (existing?.type === node.type && existing.credentials) {
+						node.credentials = { ...existing.credentials };
+					}
+				}
+			}
 
 			// Resolve the project ID from the workflow's owner relationship
 			const sharedWorkflow = await sharedWorkflowRepository.findOneOrFail({
