@@ -4,7 +4,7 @@ import z from 'zod';
 import { USER_CALLED_MCP_TOOL_EVENT } from '../../mcp.constants';
 import type { ToolDefinition, UserCalledMCPToolEventPayload } from '../../mcp.types';
 import { CODE_BUILDER_VALIDATE_TOOL, MCP_UPDATE_WORKFLOW_TOOL } from './constants';
-import { autoPopulateNodeCredentials } from './credentials-auto-assign';
+import { autoPopulateNodeCredentials, stripNullCredentialStubs } from './credentials-auto-assign';
 
 import type { CredentialsService } from '@/credentials/credentials.service';
 import type { NodeTypes } from '@/node-types';
@@ -14,7 +14,7 @@ import { resolveNodeWebhookIds } from '@/workflow-helpers';
 import type { WorkflowFinderService } from '@/workflows/workflow-finder.service';
 import type { WorkflowService } from '@/workflows/workflow.service';
 
-import { getMcpWorkflow } from '../workflow-validation.utils';
+import { getMcpWorkflow, getSdkReferenceHint } from '../workflow-validation.utils';
 
 const inputSchema = {
 	workflowId: z.string().describe('The ID of the workflow to update'),
@@ -55,6 +55,12 @@ const outputSchema = {
 		.optional()
 		.describe(
 			'Additional notes about the workflow update, such as any nodes that were skipped during credential auto-assignment.',
+		),
+	hint: z
+		.string()
+		.optional()
+		.describe(
+			'Actionable hint for recovering from the error. When present, follow the suggested action before retrying.',
 		),
 } satisfies z.ZodRawShape;
 
@@ -133,6 +139,8 @@ export const createUpdateWorkflowTool = (
 
 			resolveNodeWebhookIds(workflowUpdateData, nodeTypes);
 
+			stripNullCredentialStubs(workflowUpdateData.nodes);
+
 			// Preserve user-configured credentials from the existing workflow.
 			// Match nodes by name + type so that auto-assign skips them.
 			const existingCredsByNode = new Map(
@@ -202,7 +210,8 @@ export const createUpdateWorkflowTool = (
 			};
 			telemetry.track(USER_CALLED_MCP_TOOL_EVENT, telemetryPayload);
 
-			const output = { error: errorMessage };
+			const hint = getSdkReferenceHint(error);
+			const output = { error: errorMessage, ...(hint ? { hint } : {}) };
 
 			return {
 				content: [{ type: 'text', text: JSON.stringify(output, null, 2) }],
