@@ -1895,6 +1895,45 @@ describe('LogStreamingEventRelay', () => {
 			});
 		});
 
+		it('should log on `execution-waiting` event', () => {
+			const event: RelayEventMap['execution-waiting'] = {
+				executionId: 'exec-waiting-123',
+				workflowId: 'wf-waiting-456',
+			};
+
+			eventService.emit('execution-waiting', event);
+
+			expect(eventBus.sendAuditEvent).toHaveBeenCalledWith({
+				eventName: 'n8n.audit.workflow.waiting',
+				payload: {
+					executionId: 'exec-waiting-123',
+					workflowId: 'wf-waiting-456',
+				},
+			});
+		});
+
+		it('should log on `execution-resumed` event with resumeSource webhook', () => {
+			const responseAt = new Date('2025-06-02T08:00:00.000Z');
+			const event: RelayEventMap['execution-resumed'] = {
+				executionId: 'exec-resumed-123',
+				workflowId: 'wf-resumed-456',
+				resumeSource: 'webhook',
+				responseAt,
+			};
+
+			eventService.emit('execution-resumed', event);
+
+			expect(eventBus.sendAuditEvent).toHaveBeenCalledWith({
+				eventName: 'n8n.audit.workflow.resumed',
+				payload: {
+					executionId: 'exec-resumed-123',
+					workflowId: 'wf-resumed-456',
+					resumeSource: 'webhook',
+					responseAt: responseAt.toISOString(),
+				},
+			});
+		});
+
 		it('should log on `workflow-executed` event for retry user execution', () => {
 			const event: RelayEventMap['workflow-executed'] = {
 				user: {
@@ -2614,6 +2653,95 @@ describe('LogStreamingEventRelay', () => {
 					_firstName: 'Sixth',
 					_lastName: 'Admin',
 					globalRole: 'global:admin',
+				},
+			});
+		});
+	});
+
+	describe('redaction enforcement events', () => {
+		it('should log `redaction-enforcement.updated` with redacted user and before/after payload', () => {
+			const event: RelayEventMap['redaction-enforcement-updated'] = {
+				user: {
+					id: 'user404',
+					email: 'admin7@example.com',
+					firstName: 'Seventh',
+					lastName: 'Admin',
+					role: { slug: 'global:owner' },
+				},
+				before: 'off',
+				after: 'production',
+			};
+
+			eventService.emit('redaction-enforcement-updated', event);
+
+			expect(eventBus.sendAuditEvent).toHaveBeenCalledWith({
+				eventName: 'n8n.audit.redaction-enforcement.updated',
+				payload: {
+					userId: 'user404',
+					_email: 'admin7@example.com',
+					_firstName: 'Seventh',
+					_lastName: 'Admin',
+					globalRole: 'global:owner',
+					before: 'off',
+					after: 'production',
+				},
+			});
+		});
+
+		it('should log `redaction-enforcement.updated` for downgrade (all -> production)', () => {
+			const event: RelayEventMap['redaction-enforcement-updated'] = {
+				user: {
+					id: 'user404',
+					email: 'admin7@example.com',
+					firstName: 'Seventh',
+					lastName: 'Admin',
+					role: { slug: 'global:owner' },
+				},
+				before: 'all',
+				after: 'production',
+			};
+
+			eventService.emit('redaction-enforcement-updated', event);
+
+			expect(eventBus.sendAuditEvent).toHaveBeenCalledWith({
+				eventName: 'n8n.audit.redaction-enforcement.updated',
+				payload: {
+					userId: 'user404',
+					_email: 'admin7@example.com',
+					_firstName: 'Seventh',
+					_lastName: 'Admin',
+					globalRole: 'global:owner',
+					before: 'all',
+					after: 'production',
+				},
+			});
+		});
+
+		it('should log `redaction-enforcement.updated` for upgrade to `all`', () => {
+			const event: RelayEventMap['redaction-enforcement-updated'] = {
+				user: {
+					id: 'user404',
+					email: 'admin7@example.com',
+					firstName: 'Seventh',
+					lastName: 'Admin',
+					role: { slug: 'global:owner' },
+				},
+				before: 'production',
+				after: 'all',
+			};
+
+			eventService.emit('redaction-enforcement-updated', event);
+
+			expect(eventBus.sendAuditEvent).toHaveBeenCalledWith({
+				eventName: 'n8n.audit.redaction-enforcement.updated',
+				payload: {
+					userId: 'user404',
+					_email: 'admin7@example.com',
+					_firstName: 'Seventh',
+					_lastName: 'Admin',
+					globalRole: 'global:owner',
+					before: 'production',
+					after: 'all',
 				},
 			});
 		});

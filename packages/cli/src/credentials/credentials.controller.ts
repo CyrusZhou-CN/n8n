@@ -28,7 +28,6 @@ import {
 import { hasGlobalScope, PROJECT_OWNER_ROLE_SLUG } from '@n8n/permissions';
 // eslint-disable-next-line n8n-local-rules/misplaced-n8n-typeorm-import
 import { In } from '@n8n/typeorm';
-import { deepCopy } from 'n8n-workflow';
 import type { ICredentialDataDecryptedObject } from 'n8n-workflow';
 import { z } from 'zod';
 
@@ -37,6 +36,7 @@ import { CredentialsService } from './credentials.service';
 import { EnterpriseCredentialsService } from './credentials.service.ee';
 import { getExternalSecretExpressionPaths } from './external-secrets.utils';
 
+import { CredentialNotFoundError } from '@/errors/credential-not-found.error';
 import { BadRequestError } from '@/errors/response-errors/bad-request.error';
 import { ForbiddenError } from '@/errors/response-errors/forbidden.error';
 import { NotFoundError } from '@/errors/response-errors/not-found.error';
@@ -140,41 +140,15 @@ export class CredentialsController {
 	// TODO: Write at least test cases for the failure paths.
 	@Post('/test')
 	async testCredentials(req: CredentialRequest.Test) {
-		const { credentials } = req.body;
+		try {
+			return await this.credentialsService.testWithCredentials(req.user, req.body.credentials);
+		} catch (error) {
+			if (error instanceof CredentialNotFoundError) {
+				throw new ForbiddenError();
+			}
 
-		const storedCredential = await this.credentialsFinderService.findCredentialForUser(
-			credentials.id,
-			req.user,
-			['credential:read'],
-		);
-
-		if (!storedCredential) {
-			throw new ForbiddenError();
+			throw error;
 		}
-
-		const mergedCredentials = deepCopy(credentials);
-		const decryptedData = this.credentialsService.decrypt(storedCredential, true);
-
-		// When a sharee (or project viewer) opens a credential, the fields and the
-		// credential data are missing so the payload will be empty
-		// We need to replace the credential contents with the db version if that's the case
-		// So the credential can be tested properly
-		await this.credentialsService.replaceCredentialContentsForSharee(
-			req.user,
-			storedCredential,
-			decryptedData,
-			mergedCredentials,
-		);
-
-		if (mergedCredentials.data) {
-			mergedCredentials.data = this.credentialsService.unredact(
-				mergedCredentials.data,
-				decryptedData,
-				this.credentialsService.getCredentialTypeProperties(storedCredential.type),
-			);
-		}
-
-		return await this.credentialsService.test(req.user.id, mergedCredentials);
 	}
 
 	@Post('/')
@@ -202,7 +176,18 @@ export class CredentialsController {
 			uiContext: payload.uiContext,
 			isDynamic: newCredential.isResolvable ?? false,
 			usesExternalSecrets: getExternalSecretExpressionPaths(payload.data).length > 0,
+			jweEnabled: payload.data.jweEnabled === true,
 		});
+
+		if (newCredential.isResolvable) {
+			this.eventService.emit('private-credential-created', {
+				user: req.user,
+				credentialType: newCredential.type,
+				credentialId: newCredential.id,
+				projectId: project?.id,
+				projectType: project?.type,
+			});
+		}
 
 		return newCredential;
 	}
@@ -239,12 +224,19 @@ export class CredentialsController {
 		// We never want to allow users to change the oauthTokenData
 		delete body.data?.oauthTokenData;
 
+		// eslint-disable-next-line @typescript-eslint/no-unnecessary-boolean-literal-compare
+		const isTogglingToPrivate = body.isResolvable === true && credential.isResolvable === false;
+		// eslint-disable-next-line @typescript-eslint/no-unnecessary-boolean-literal-compare
+		const isTogglingToStatic = body.isResolvable === false && credential.isResolvable === true;
+
 		const preparedCredentialData = await this.credentialsService.prepareUpdateData(
 			req.user,
 			req.body,
 			credential,
+			{ clearOauthTokenData: isTogglingToPrivate },
 		);
-		const newCredentialData = this.credentialsService.createEncryptedData({
+
+		const newCredentialData = await this.credentialsService.createEncryptedData({
 			id: credential.id,
 			name: preparedCredentialData.name,
 			type: preparedCredentialData.type,
@@ -274,6 +266,7 @@ export class CredentialsController {
 			body.data
 				? (preparedCredentialData.data as unknown as ICredentialDataDecryptedObject)
 				: undefined,
+			{ deleteUserEntries: isTogglingToStatic },
 		);
 
 		if (responseData === null) {
@@ -291,7 +284,26 @@ export class CredentialsController {
 			credentialId: credential.id,
 			isDynamic: newCredentialData.isResolvable ?? false,
 			usesExternalSecrets: getExternalSecretExpressionPaths(preparedCredentialData.data).length > 0,
+			jweEnabled:
+				(preparedCredentialData.data as unknown as ICredentialDataDecryptedObject).jweEnabled ===
+				true,
 		});
+
+		const wasResolvable = Boolean(credential.isResolvable);
+		const willBeResolvable = Boolean(newCredentialData.isResolvable);
+		if (!wasResolvable && willBeResolvable) {
+			this.eventService.emit('private-credential-toggled-to-private', {
+				user: req.user,
+				credentialType: credential.type,
+				credentialId: credential.id,
+			});
+		} else if (wasResolvable && !willBeResolvable) {
+			this.eventService.emit('private-credential-toggled-to-static', {
+				user: req.user,
+				credentialType: credential.type,
+				credentialId: credential.id,
+			});
+		}
 
 		const scopes = await this.credentialsService.getCredentialScopes(req.user, credential.id);
 
@@ -326,6 +338,14 @@ export class CredentialsController {
 			credentialType: credential.type,
 			credentialId: credential.id,
 		});
+
+		if (credential.isResolvable) {
+			this.eventService.emit('private-credential-deleted', {
+				user: req.user,
+				credentialType: credential.type,
+				credentialId: credential.id,
+			});
+		}
 
 		return true;
 	}

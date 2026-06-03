@@ -16,6 +16,16 @@ function hasUser(event: WorkflowExecutedEvent): event is WorkflowExecutedEventWi
 	return event.user !== undefined;
 }
 
+function withoutTelemetryMetadata(
+	event: RelayEventMap['workflow-post-execute'],
+): Omit<RelayEventMap['workflow-post-execute'], 'telemetryMetadata'> {
+	const eventWithoutTelemetryMetadata = { ...event };
+
+	delete eventWithoutTelemetryMetadata.telemetryMetadata;
+
+	return eventWithoutTelemetryMetadata;
+}
+
 @Service()
 export class LogStreamingEventRelay extends EventRelay {
 	constructor(
@@ -58,8 +68,10 @@ export class LogStreamingEventRelay extends EventRelay {
 			'email-failed': (event) => this.emailFailed(event),
 			'credentials-created': (event) => this.credentialsCreated(event),
 			'credentials-deleted': (event) => this.credentialsDeleted(event),
+			'credentials-user-disconnected': (event) => this.credentialsUserDisconnected(event),
 			'credentials-shared': (event) => this.credentialsShared(event),
 			'credentials-updated': (event) => this.credentialsUpdated(event),
+			'oauth-callback-binding-rejected': (event) => this.oauthCallbackBindingRejected(event),
 			'variable-created': (event) => this.variableCreated(event),
 			'variable-updated': (event) => this.variableUpdated(event),
 			'variable-deleted': (event) => this.variableDeleted(event),
@@ -82,6 +94,8 @@ export class LogStreamingEventRelay extends EventRelay {
 			'execution-started-during-bootup': (event) => this.executionStartedDuringBootup(event),
 			'execution-cancelled': (event) => this.executionCancelled(event),
 			'execution-deleted': (event) => this.executionDeleted(event),
+			'execution-waiting': (event) => this.executionWaiting(event),
+			'execution-resumed': (event) => this.executionResumed(event),
 			'execution-data-revealed': (event) => this.executionDataRevealed(event),
 			'execution-data-reveal-failure': (event) => this.executionDataRevealFailure(event),
 			'ai-messages-retrieved-from-memory': (event) => this.aiMessagesRetrievedFromMemory(event),
@@ -104,6 +118,7 @@ export class LogStreamingEventRelay extends EventRelay {
 			'job-dequeued': (event) => this.jobDequeued(event),
 			'job-stalled': (event) => this.jobStalled(event),
 			'instance-policies-updated': (event) => this.instancePoliciesUpdated(event),
+			'redaction-enforcement-updated': (event) => this.redactionEnforcementUpdated(event),
 			'token-exchange-succeeded': (event) => this.tokenExchangeSucceeded(event),
 			'token-exchange-failed': (event) => this.tokenExchangeFailed(event),
 			'token-exchange-identity-linked': (event) => this.tokenExchangeIdentityLinked(event),
@@ -115,6 +130,7 @@ export class LogStreamingEventRelay extends EventRelay {
 			'role-mapping-rule-created': (event) => this.roleMappingRuleCreated(event),
 			'role-mapping-rule-updated': (event) => this.roleMappingRuleUpdated(event),
 			'role-mapping-rule-deleted': (event) => this.roleMappingRuleDeleted(event),
+			'role-mapping-rules-bulk-deleted': (event) => this.roleMappingRulesBulkDeleted(event),
 		});
 	}
 
@@ -259,7 +275,8 @@ export class LogStreamingEventRelay extends EventRelay {
 	}
 
 	private workflowPostExecute(event: RelayEventMap['workflow-post-execute']) {
-		const { runData, workflow, executionId, projectId, projectName, ...rest } = event;
+		const { runData, workflow, executionId, projectId, projectName, ...rest } =
+			withoutTelemetryMetadata(event);
 
 		const payload = {
 			...rest,
@@ -574,6 +591,17 @@ export class LogStreamingEventRelay extends EventRelay {
 	}
 
 	@Redactable()
+	private credentialsUserDisconnected({
+		user,
+		...rest
+	}: RelayEventMap['credentials-user-disconnected']) {
+		void this.eventBus.sendAuditEvent({
+			eventName: 'n8n.audit.user.credentials.userDisconnected',
+			payload: { ...user, ...rest },
+		});
+	}
+
+	@Redactable()
 	private credentialsShared({ user, ...rest }: RelayEventMap['credentials-shared']) {
 		void this.eventBus.sendAuditEvent({
 			eventName: 'n8n.audit.user.credentials.shared',
@@ -586,6 +614,15 @@ export class LogStreamingEventRelay extends EventRelay {
 		void this.eventBus.sendAuditEvent({
 			eventName: 'n8n.audit.user.credentials.updated',
 			payload: { ...user, ...rest },
+		});
+	}
+
+	private oauthCallbackBindingRejected(
+		event: RelayEventMap['oauth-callback-binding-rejected'] /* no user context at OAuth callback time */,
+	) {
+		void this.eventBus.sendAuditEvent({
+			eventName: 'n8n.audit.oauth.callback.binding.rejected',
+			payload: event,
 		});
 	}
 
@@ -764,6 +801,33 @@ export class LogStreamingEventRelay extends EventRelay {
 				...user,
 				executionIds,
 				...(deleteBefore && { deleteBefore: deleteBefore.toISOString() }),
+			},
+		});
+	}
+
+	private executionWaiting({ executionId, workflowId }: RelayEventMap['execution-waiting']) {
+		void this.eventBus.sendAuditEvent({
+			eventName: 'n8n.audit.workflow.waiting',
+			payload: {
+				executionId,
+				workflowId,
+			},
+		});
+	}
+
+	private executionResumed({
+		executionId,
+		workflowId,
+		resumeSource,
+		responseAt,
+	}: RelayEventMap['execution-resumed']) {
+		void this.eventBus.sendAuditEvent({
+			eventName: 'n8n.audit.workflow.resumed',
+			payload: {
+				executionId,
+				workflowId,
+				resumeSource,
+				responseAt: responseAt.toISOString(),
 			},
 		});
 	}
@@ -994,6 +1058,18 @@ export class LogStreamingEventRelay extends EventRelay {
 		}
 	}
 
+	@Redactable()
+	private redactionEnforcementUpdated({
+		user,
+		before,
+		after,
+	}: RelayEventMap['redaction-enforcement-updated']) {
+		void this.eventBus.sendAuditEvent({
+			eventName: 'n8n.audit.redaction-enforcement.updated',
+			payload: { ...user, before, after },
+		});
+	}
+
 	// #endregion
 
 	// #region Token exchange
@@ -1106,6 +1182,19 @@ export class LogStreamingEventRelay extends EventRelay {
 				msg: {
 					ruleId: event.ruleId,
 					ruleType: event.ruleType,
+				},
+			},
+		});
+	}
+
+	private roleMappingRulesBulkDeleted(event: RelayEventMap['role-mapping-rules-bulk-deleted']) {
+		void this.eventBus.sendAuditEvent({
+			eventName: 'n8n.audit.role-mapping.rules.bulk-deleted',
+			payload: {
+				msg: {
+					ruleType: event.ruleType,
+					count: event.count,
+					reason: event.reason,
 				},
 			},
 		});

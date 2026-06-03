@@ -1,5 +1,5 @@
 import { ApplicationError } from '@n8n/errors';
-import type { IExpressionEvaluator } from '@n8n/expression-runtime';
+import type { IExpressionEvaluator, ObservabilityProvider } from '@n8n/expression-runtime';
 import { MemoryLimitError, SecurityViolationError, TimeoutError } from '@n8n/expression-runtime';
 import { DateTime, Duration, Interval } from 'luxon';
 
@@ -250,6 +250,8 @@ export class Expression {
 		bridgeMemoryLimit: number;
 		poolSize: number;
 		maxCodeCacheSize: number;
+		observability?: ObservabilityProvider;
+		idleTimeoutMs?: number;
 	}): Promise<void> {
 		if (options.engine !== 'vm' || IS_FRONTEND) return;
 		this.expressionEngine = options.engine;
@@ -266,11 +268,13 @@ export class Expression {
 					}),
 				maxCodeCacheSize: options.maxCodeCacheSize,
 				poolSize: options.poolSize,
+				idleTimeoutMs: options.idleTimeoutMs,
 				hooks: {
 					before: [ThisSanitizer],
 					after: [PrototypeSanitizer, DollarSignValidator],
 				},
 				logger: LoggerProxy,
+				observability: options.observability,
 			});
 			await this.vmEvaluator.initialize();
 		}
@@ -543,9 +547,33 @@ export class Expression {
 
 		Expression.initializeGlobalContext(data);
 
-		// expression extensions
-		data.extend = extend;
-		data.extendOptional = extendOptional;
+		const usingVm = Expression.shouldUseVm();
+
+		// Expression extensions — only attached for the legacy engine.
+		//
+		// In the VM engine, function-typed bindings on `data` are
+		// structurally unreachable: the bridge's `getValueAtPath` returns
+		// `undefined` for any function-typed value, and the in-isolate
+		// runtime resolves helpers itself via Tournament's polyfill
+		// (see packages/@n8n/expression-runtime/src/runtime/context.ts,
+		// where bare `extend(...)` calls bind to the in-isolate copy on
+		// `target.extend`). Setting them on `data` in VM mode would be
+		// dead code.
+		if (!usingVm) {
+			data.extend = extend;
+			data.extendOptional = extendOptional;
+		}
+
+		// In VM mode, strip `$jmesPath` / `$jmespath` from the data proxy.
+		// WorkflowDataProxy adds them, but the in-isolate `target.$jmespath`
+		// shadows them via Tournament's polyfill (see
+		// packages/@n8n/expression-runtime/src/runtime/context.ts). The delete
+		// makes them unreachable via direct path lookup through the bridge
+		// too, so the bridge can never invoke the host-side copies.
+		if (usingVm) {
+			delete data.$jmesPath;
+			delete data.$jmespath;
+		}
 
 		Object.defineProperty(data, sanitizerName, {
 			value: sanitizer,

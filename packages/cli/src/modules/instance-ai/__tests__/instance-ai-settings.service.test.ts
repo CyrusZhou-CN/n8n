@@ -1,9 +1,11 @@
 import type { InstanceAiConfig } from '@n8n/config';
-import type { SettingsRepository, User } from '@n8n/db';
+import type { SettingsRepository, User, UserRepository } from '@n8n/db';
 import { mock } from 'jest-mock-extended';
 
 import { UnprocessableRequestError } from '@/errors/response-errors/unprocessable.error';
+import type { EventService } from '@/events/event.service';
 import type { AiService } from '@/services/ai.service';
+import type { UserService } from '@/services/user.service';
 import type { CredentialsFinderService } from '@/credentials/credentials-finder.service';
 import type { CredentialsService } from '@/credentials/credentials.service';
 
@@ -15,14 +17,12 @@ describe('InstanceAiSettingsService', () => {
 		deployment: { type: string };
 	}>({
 		instanceAi: {
-			lastMessages: 10,
 			model: 'openai/gpt-4',
 			modelUrl: '',
 			modelApiKey: '',
-			embedderModel: '',
-			semanticRecallTopK: 5,
+			observerMessageTokens: 30_000,
+			reflectorObservationTokens: 40_000,
 			subAgentMaxSteps: 10,
-			browserMcp: false,
 			mcpServers: '',
 			sandboxEnabled: false,
 			sandboxProvider: '',
@@ -33,9 +33,12 @@ describe('InstanceAiSettingsService', () => {
 		deployment: { type: 'default' },
 	});
 	const settingsRepository = mock<SettingsRepository>();
+	const userRepository = mock<UserRepository>();
+	const userService = mock<UserService>();
 	const aiService = mock<AiService>();
 	const credentialsService = mock<CredentialsService>();
 	const credentialsFinderService = mock<CredentialsFinderService>();
+	const eventService = mock<EventService>();
 
 	let service: InstanceAiSettingsService;
 
@@ -44,9 +47,12 @@ describe('InstanceAiSettingsService', () => {
 		service = new InstanceAiSettingsService(
 			globalConfig as never,
 			settingsRepository,
+			userRepository,
+			userService,
 			aiService,
 			credentialsService,
 			credentialsFinderService,
+			eventService,
 		);
 	});
 
@@ -57,7 +63,6 @@ describe('InstanceAiSettingsService', () => {
 			await expect(
 				service.updateAdminSettings({
 					sandboxEnabled: true,
-					lastMessages: 50,
 				}),
 			).rejects.toThrow(UnprocessableRequestError);
 		});
@@ -77,7 +82,7 @@ describe('InstanceAiSettingsService', () => {
 			aiService.isProxyEnabled.mockReturnValue(true);
 			settingsRepository.upsert.mockResolvedValue(undefined as never);
 
-			await expect(service.updateAdminSettings({ lastMessages: 50 })).resolves.toBeDefined();
+			await expect(service.updateAdminSettings({ subAgentMaxSteps: 50 })).resolves.toBeDefined();
 		});
 
 		it('should allow proxy-managed fields when proxy is disabled', async () => {
@@ -85,6 +90,49 @@ describe('InstanceAiSettingsService', () => {
 			settingsRepository.upsert.mockResolvedValue(undefined as never);
 
 			await expect(service.updateAdminSettings({ sandboxEnabled: true })).resolves.toBeDefined();
+		});
+	});
+
+	describe('instance-ai-settings-updated event', () => {
+		beforeEach(() => {
+			aiService.isProxyEnabled.mockReturnValue(false);
+			settingsRepository.upsert.mockResolvedValue(undefined as never);
+			globalConfig.instanceAi.mcpServers = '';
+		});
+
+		it('emits on every successful update', async () => {
+			await service.updateAdminSettings({ subAgentMaxSteps: 50 });
+
+			expect(eventService.emit).toHaveBeenCalledWith(
+				'instance-ai-settings-updated',
+				expect.any(Object),
+			);
+		});
+
+		it('flags mcpSettingsChanged when mcpServers changes', async () => {
+			await service.updateAdminSettings({ mcpServers: '[{"name":"a","url":"https://a/"}]' });
+
+			expect(eventService.emit).toHaveBeenCalledWith('instance-ai-settings-updated', {
+				mcpSettingsChanged: true,
+			});
+		});
+
+		it('does not flag mcpSettingsChanged for unrelated field changes', async () => {
+			await service.updateAdminSettings({ subAgentMaxSteps: 50 });
+
+			expect(eventService.emit).toHaveBeenCalledWith('instance-ai-settings-updated', {
+				mcpSettingsChanged: false,
+			});
+		});
+
+		it('does not flag mcpSettingsChanged when mcpServers is set to the same value', async () => {
+			globalConfig.instanceAi.mcpServers = '[{"name":"a","url":"https://a/"}]';
+
+			await service.updateAdminSettings({ mcpServers: '[{"name":"a","url":"https://a/"}]' });
+
+			expect(eventService.emit).toHaveBeenCalledWith('instance-ai-settings-updated', {
+				mcpSettingsChanged: false,
+			});
 		});
 	});
 
@@ -112,11 +160,28 @@ describe('InstanceAiSettingsService', () => {
 
 		it('should allow non-proxy-managed fields when proxy is enabled', async () => {
 			aiService.isProxyEnabled.mockReturnValue(true);
-			settingsRepository.upsert.mockResolvedValue(undefined as never);
 
 			await expect(
 				service.updateUserPreferences(user, { localGatewayDisabled: true }),
 			).resolves.toBeDefined();
+
+			expect(userService.updateSettings).toHaveBeenCalledWith('user-1', {
+				instanceAi: { localGatewayDisabled: true },
+			});
+		});
+
+		it('should merge new fields with existing instanceAi settings on update', async () => {
+			aiService.isProxyEnabled.mockReturnValue(false);
+			const existingUser = mock<User>({
+				id: 'user-2',
+				settings: { instanceAi: { credentialId: 'cred-old', modelName: 'gpt-3.5' } },
+			});
+
+			await service.updateUserPreferences(existingUser, { modelName: 'gpt-4' });
+
+			expect(userService.updateSettings).toHaveBeenCalledWith('user-2', {
+				instanceAi: { credentialId: 'cred-old', modelName: 'gpt-4' },
+			});
 		});
 	});
 
@@ -130,12 +195,6 @@ describe('InstanceAiSettingsService', () => {
 		});
 
 		describe('updateAdminSettings', () => {
-			it('should reject memory fields on cloud', async () => {
-				await expect(service.updateAdminSettings({ lastMessages: 50 })).rejects.toThrow(
-					UnprocessableRequestError,
-				);
-			});
-
 			it('should reject advanced fields on cloud', async () => {
 				await expect(service.updateAdminSettings({ subAgentMaxSteps: 50 })).rejects.toThrow(
 					UnprocessableRequestError,
@@ -149,7 +208,7 @@ describe('InstanceAiSettingsService', () => {
 			});
 
 			it('should include cloud-managed label in error message', async () => {
-				await expect(service.updateAdminSettings({ lastMessages: 50 })).rejects.toThrow(
+				await expect(service.updateAdminSettings({ subAgentMaxSteps: 50 })).rejects.toThrow(
 					/cloud-managed/,
 				);
 			});
@@ -195,11 +254,13 @@ describe('InstanceAiSettingsService', () => {
 			});
 
 			it('should allow localGatewayDisabled on cloud', async () => {
-				settingsRepository.upsert.mockResolvedValue(undefined as never);
-
 				await expect(
 					service.updateUserPreferences(user, { localGatewayDisabled: true }),
 				).resolves.toBeDefined();
+
+				expect(userService.updateSettings).toHaveBeenCalledWith('user-1', {
+					instanceAi: { localGatewayDisabled: true },
+				});
 			});
 		});
 	});

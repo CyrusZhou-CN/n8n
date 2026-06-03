@@ -1,4 +1,4 @@
-import type { AuthenticationMethod, ProjectRelation } from '@n8n/api-types';
+import type { AuthenticationMethod, ProjectRelation, RedactionFloor } from '@n8n/api-types';
 import type { AuthProviderType, User, IWorkflowDb } from '@n8n/db';
 import type {
 	CancellationReason,
@@ -15,6 +15,8 @@ import type { ConcurrencyQueueType } from '@/concurrency/concurrency-control.ser
 import type { TokenExchangeFailureReason } from '@/modules/token-exchange/token-exchange.types';
 
 import type { AiEventMap } from './ai.event-map';
+
+export type WorkflowActionSource = 'ui' | 'api' | 'n8n-mcp' | 'n8n-ai' | 'import';
 
 export type UserLike = {
 	id: string;
@@ -79,6 +81,16 @@ export type RelayEventMap = {
 		projectId: string;
 		projectType: string;
 		uiContext?: string;
+		source?: WorkflowActionSource;
+	};
+
+	'workflows-imported': {
+		user: UserLike;
+		projectId: string;
+		workflowIds: string[];
+		packageSourceId: string;
+		packageVersion: string;
+		matchedCredentialIds: string[];
 	};
 
 	'workflow-deleted': {
@@ -106,6 +118,7 @@ export type RelayEventMap = {
 		previousWorkflow?: IWorkflowDb;
 		aiBuilderAssisted?: boolean;
 		settingsChanged?: Record<string, { from: JsonValue; to: JsonValue }>;
+		source?: WorkflowActionSource;
 	};
 
 	'workflow-activated': {
@@ -113,6 +126,7 @@ export type RelayEventMap = {
 		workflowId: string;
 		workflow: IWorkflowDb;
 		publicApi: boolean;
+		source?: WorkflowActionSource;
 	};
 
 	'workflow-deactivated': {
@@ -121,6 +135,7 @@ export type RelayEventMap = {
 		workflow: IWorkflowDb;
 		publicApi: boolean;
 		deactivatedVersionId: string | null;
+		source?: WorkflowActionSource;
 	};
 
 	'workflow-pre-execute': {
@@ -138,6 +153,7 @@ export type RelayEventMap = {
 		runData?: IRun;
 		projectId?: string;
 		projectName?: string;
+		telemetryMetadata?: IWorkflowExecutionDataProcess['telemetryMetadata'];
 	};
 
 	'workflow-sharing-updated': {
@@ -384,6 +400,7 @@ export type RelayEventMap = {
 		uiContext?: string;
 		isDynamic?: boolean;
 		usesExternalSecrets?: boolean;
+		jweEnabled?: boolean;
 	};
 
 	'credentials-shared': {
@@ -401,9 +418,54 @@ export type RelayEventMap = {
 		credentialId: string;
 		isDynamic?: boolean;
 		usesExternalSecrets?: boolean;
+		jweEnabled?: boolean;
 	};
 
 	'credentials-deleted': {
+		user: UserLike;
+		credentialType: string;
+		credentialId: string;
+	};
+
+	'credentials-user-disconnected': {
+		user: UserLike;
+		credentialType: string;
+		credentialId: string;
+	};
+
+	'oauth-callback-binding-rejected': {
+		reason: 'cookie-missing' | 'hash-mismatch';
+		credentialId?: string;
+		origin?: 'static-credential' | 'dynamic-credential';
+	};
+
+	'private-credential-created': {
+		user: UserLike;
+		credentialType: string;
+		credentialId: string;
+		projectId?: string;
+		projectType?: string;
+	};
+
+	'private-credential-toggled-to-private': {
+		user: UserLike;
+		credentialType: string;
+		credentialId: string;
+	};
+
+	'private-credential-toggled-to-static': {
+		user: UserLike;
+		credentialType: string;
+		credentialId: string;
+	};
+
+	'private-credential-deleted': {
+		user: UserLike;
+		credentialType: string;
+		credentialId: string;
+	};
+
+	'private-credential-user-connected': {
 		user: UserLike;
 		credentialType: string;
 		credentialId: string;
@@ -470,6 +532,18 @@ export type RelayEventMap = {
 		deleteBefore?: Date;
 	};
 
+	'execution-waiting': {
+		executionId: string;
+		workflowId: string;
+	};
+
+	'execution-resumed': {
+		executionId: string;
+		workflowId: string;
+		resumeSource: 'webhook';
+		responseAt: Date;
+	};
+
 	'execution-data-revealed': {
 		user: UserLike;
 		executionId: string;
@@ -496,8 +570,9 @@ export type RelayEventMap = {
 	'team-project-updated': {
 		userId: string;
 		role: string;
-		members: ProjectRelation[];
+		members?: ProjectRelation[];
 		projectId: string;
+		otelProjectCustomTagsCount?: number;
 	};
 
 	'team-project-deleted': {
@@ -759,6 +834,12 @@ export type RelayEventMap = {
 		ruleType: 'instance' | 'project';
 	};
 
+	'role-mapping-rules-bulk-deleted': {
+		ruleType: 'instance' | 'project';
+		count: number;
+		reason: 'strategy-switch';
+	};
+
 	// #endregion
 
 	// #region Token exchange
@@ -903,6 +984,12 @@ export type RelayEventMap = {
 		value: boolean;
 	};
 
+	'redaction-enforcement-updated': {
+		user: UserLike;
+		before: RedactionFloor;
+		after: RedactionFloor;
+	};
+
 	// #endregion
 
 	// #region Custom Roles
@@ -922,6 +1009,14 @@ export type RelayEventMap = {
 	'custom-role-deleted': {
 		userId: string;
 		roleSlug: string;
+	};
+
+	// #endregion
+
+	// #region Instance AI
+
+	'instance-ai-settings-updated': {
+		mcpSettingsChanged: boolean;
 	};
 
 	// #endregion
