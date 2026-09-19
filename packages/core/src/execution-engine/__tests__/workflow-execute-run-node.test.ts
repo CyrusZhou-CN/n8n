@@ -78,7 +78,13 @@ import type {
 	IWorkflowExecuteAdditionalData,
 	Workflow,
 } from 'n8n-workflow';
-import { NodeApiError, NodeOperationError, Node, createRunExecutionData } from 'n8n-workflow';
+import {
+	NodeApiError,
+	NodeOperationError,
+	Node,
+	createRunExecutionData,
+	UnexpectedError,
+} from 'n8n-workflow';
 import type { Mock, Mocked, MockedClass } from 'vitest';
 import { mock } from 'vitest-mock-extended';
 
@@ -230,6 +236,55 @@ describe('WorkflowExecute.runNode - Real Implementation', () => {
 			);
 
 			expect(result).toEqual({ data: [inputData] });
+		});
+
+		it('should forward only the first output branch for a multi-output disabled node without forwardAllOutputs', async () => {
+			// A user-disabled node (e.g. Merge) must keep the existing passthrough
+			// behaviour: only the first main input is forwarded.
+			const disabledNode = { ...mockNode, disabled: true };
+			const branches = [[{ json: { branch: 0 } }], [{ json: { branch: 1 } }]];
+			const executionData = {
+				...mockExecutionData,
+				node: disabledNode,
+				data: { main: branches },
+			};
+
+			const result = await workflowExecute.runNode(
+				mockWorkflow,
+				executionData,
+				mockRunExecutionData,
+				0,
+				mockAdditionalData,
+				'manual',
+			);
+
+			expect(result).toEqual({ data: [branches[0]] });
+		});
+
+		it('should forward all output branches for a resumed waiting-webhook node (forwardAllOutputs)', async () => {
+			// Regression test for the waiting-webhook resume path: the resuming node
+			// is flagged disabled and its data.main holds the full set of output
+			// branches returned by webhook(). All branches must be forwarded, not
+			// just output 0. See https://github.com/n8n-io/n8n/issues/12823
+			const disabledNode = { ...mockNode, disabled: true };
+			const outputBranches = [[], [{ json: { action: 'Decline' } }], []];
+			const executionData = {
+				...mockExecutionData,
+				node: disabledNode,
+				data: { main: outputBranches },
+				metadata: { forwardAllOutputs: true },
+			};
+
+			const result = await workflowExecute.runNode(
+				mockWorkflow,
+				executionData,
+				mockRunExecutionData,
+				0,
+				mockAdditionalData,
+				'manual',
+			);
+
+			expect(result).toEqual({ data: outputBranches });
 		});
 	});
 
@@ -532,7 +587,7 @@ describe('WorkflowExecute.runNode - Real Implementation', () => {
 			expect(closeFunction2).toHaveBeenCalled();
 		});
 
-		it('should throw ApplicationError when close function throws non-Error object', async () => {
+		it('should throw UnexpectedError when close function throws non-Error object', async () => {
 			const mockData = [[{ json: { result: 'test' } }]];
 			const closeFunction1 = vi.fn().mockResolvedValue(undefined);
 			const closeFunction2 = vi.fn().mockRejectedValue('String error'); // Non-Error object to trigger line 1247
@@ -565,16 +620,17 @@ describe('WorkflowExecute.runNode - Real Implementation', () => {
 				),
 			);
 
-			await expect(
-				workflowExecute.runNode(
-					mockWorkflow,
-					mockExecutionData,
-					mockRunExecutionData,
-					0,
-					mockAdditionalData,
-					'manual',
-				),
-			).rejects.toThrow("Error on execution node's close function(s)");
+			const promise = workflowExecute.runNode(
+				mockWorkflow,
+				mockExecutionData,
+				mockRunExecutionData,
+				0,
+				mockAdditionalData,
+				'manual',
+			);
+
+			await expect(promise).rejects.toThrow(UnexpectedError);
+			await expect(promise).rejects.toThrow("Error on execution node's close function(s)");
 
 			expect(closeFunction1).toHaveBeenCalled();
 			expect(closeFunction2).toHaveBeenCalled();

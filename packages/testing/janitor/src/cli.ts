@@ -8,7 +8,7 @@
  *   janitor impact                         # Show impact of changes
  *   janitor tcr                            # TCR workflow
  *   janitor affected-packages              # List workspace packages affected by changed files
- *   janitor scope                          # Compute per-package jest/vitest scope list
+ *   janitor scope                          # Compute per-package vitest scope list
  *   janitor --help                         # Show help
  *
  * The `affected-packages` and `scope` subcommands are workspace-wide utilities
@@ -16,6 +16,16 @@
  * invoked from any package via `pnpm exec janitor ...`.
  */
 
+import {
+	encodeImpactMap,
+	buildImpactMap,
+	distributeShards,
+	selectTests,
+	changedRuntimeDepsFromManifests,
+	changedOverrideTargets,
+	isBackendConfig,
+	isTsconfig,
+} from '@n8n/test-impact';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -45,14 +55,6 @@ import {
 	formatBaselineInfo,
 	getBaselinePath,
 } from './core/baseline.js';
-import {
-	type ImpactMap,
-	type InternedImpactMap,
-	decodeImpactMap,
-	encodeImpactMap,
-	mergeCoverage,
-	resolveImpact,
-} from './core/coverage-map.js';
 import { extractDiffs } from './core/extract-diffs.js';
 import {
 	ImpactAnalyzer,
@@ -78,9 +80,10 @@ import {
 	formatMethodUsageIndexConsole,
 	formatMethodUsageIndexJSON,
 } from './core/method-usage-analyzer.js';
-import { orchestrate } from './core/orchestrator.js';
 import { createProject } from './core/project-loader.js';
-import { toJSON, toConsole, printFixResults } from './core/reporter.js';
+import { readLockfileImporters, readRuntimeClosure } from './core/read-lockfile-importers.js';
+import { isManifest, readFileDiffs } from './core/read-manifest-diffs.js';
+import { toJSON, toConsole } from './core/reporter.js';
 import { filterToFailedSpecs } from './core/retry-filter.js';
 import { computeScope, formatScope } from './core/scope-analyzer.js';
 import { TcrExecutor, formatTcrResultConsole, formatTcrResultJSON } from './core/tcr-executor.js';
@@ -161,7 +164,7 @@ function runInventory(options: CliOptions): void {
 	}
 
 	// File filter - detailed info for single file
-	if (options.files && options.files.length === 1) {
+	if (options.files?.length === 1) {
 		const result = filterByFile(report, options.files[0]);
 		if (result) {
 			console.log(JSON.stringify(result, null, 2));
@@ -290,20 +293,13 @@ function runTcr(options: CliOptions): void {
 function runAnalyze(options: CliOptions): void {
 	const config = getConfig();
 	const runner = createDefaultRunner();
-
-	// Create project
-	const { project, root } = createProject(config.rootDir);
+	const root = config.rootDir;
 
 	// Build run options
 	const runOptions: RunOptions = {};
 
 	if (options.files && options.files.length > 0) {
 		runOptions.files = options.files;
-	}
-
-	if (options.fix) {
-		runOptions.fix = true;
-		runOptions.write = options.write;
 	}
 
 	// Pass rule-specific config
@@ -315,21 +311,20 @@ function runAnalyze(options: CliOptions): void {
 
 	// Run analysis
 	let report = options.rule
-		? runner.runRule(project, root, options.rule, runOptions)
-		: runner.run(project, root, runOptions);
+		? runner.runRule(options.rule, { rootDir: root }, runOptions)
+		: runner.run({ rootDir: root }, runOptions);
 
 	if (!report) {
 		console.error('Failed to generate report');
 		process.exit(1);
 	}
 
-	// Auto-filter by baseline if present (unless --ignore-baseline or --fix)
+	// Auto-filter by baseline if present (unless --ignore-baseline)
 	const baseline = loadBaseline(config.rootDir);
 	let baselineFiltered = false;
 	const originalViolations = report.summary.totalViolations;
 
-	if (baseline && !options.fix && !options.ignoreBaseline) {
-		// Don't filter during fix mode or when baseline is ignored
+	if (baseline && !options.ignoreBaseline) {
 		report = filterReportByBaseline(report, baseline, config.rootDir);
 		baselineFiltered = true;
 	}
@@ -350,14 +345,10 @@ function runAnalyze(options: CliOptions): void {
 		}
 
 		toConsole(report, options.verbose);
-
-		if (options.fix) {
-			printFixResults(report, options.write);
-		}
 	}
 
 	// Exit with error code if violations found
-	if (report.summary.totalViolations > 0 && !(options.fix && options.write)) {
+	if (report.summary.totalViolations > 0) {
 		process.exit(1);
 	}
 }
@@ -365,12 +356,10 @@ function runAnalyze(options: CliOptions): void {
 function runBaseline(options: CliOptions): void {
 	const config = getConfig();
 
-	// Create runner and project
 	const runner = createDefaultRunner();
-	const { project, root } = createProject(config.rootDir);
 
 	// Run full analysis (no file filter, no baseline filter)
-	const report = runner.run(project, root, {});
+	const report = runner.run({ rootDir: config.rootDir }, {});
 
 	if (!report) {
 		console.error('Failed to generate report');
@@ -506,7 +495,7 @@ async function runFilterShard(options: CliOptions): Promise<void> {
 	}
 }
 
-async function runOrchestrate(options: CliOptions): Promise<void> {
+async function runDistribute(options: CliOptions): Promise<void> {
 	const config = getConfig();
 
 	if (!options.shards || options.shards < 1) {
@@ -553,6 +542,51 @@ async function runOrchestrate(options: CliOptions): Promise<void> {
 		}
 	}
 
+	// Composable allowlist filter. distribute-tests.mjs pre-computes the union
+	// of AST + V8 selection and writes it here; distributeShards then balances shards
+	// against that subset instead of the full discovered set.
+	if (options.includeSpecsFile) {
+		const includeRaw = fs.readFileSync(options.includeSpecsFile, 'utf-8');
+		const include = new Set(
+			includeRaw
+				.split(/[\n,]+/)
+				.map((s) => s.trim())
+				.filter(Boolean),
+		);
+		const totalBefore = specs.length;
+		specs = specs.filter((s) => include.has(s.path));
+		console.error(
+			`Include: ${specs.length}/${totalBefore} specs after applying allowlist (${include.size} entries)`,
+		);
+	}
+
+	if (options.groupsFile) {
+		const groupsPath = path.isAbsolute(options.groupsFile)
+			? options.groupsFile
+			: path.resolve(config.rootDir, options.groupsFile);
+		let groups: unknown;
+		try {
+			groups = JSON.parse(fs.readFileSync(groupsPath, 'utf-8'));
+		} catch (error) {
+			throw new Error(`Cannot parse distribution groups from ${groupsPath}`, { cause: error });
+		}
+		if (typeof groups !== 'object' || groups === null || Array.isArray(groups)) {
+			throw new Error('Distribution groups must be a JSON object');
+		}
+		specs = specs.map((spec) => {
+			const fixturePools: unknown = Reflect.get(groups, spec.path.replaceAll('\\', '/'));
+			if (
+				!Array.isArray(fixturePools) ||
+				fixturePools.length === 0 ||
+				!fixturePools.every((fixture): fixture is string => typeof fixture === 'string')
+			) {
+				throw new Error(`Fixture pools missing for ${spec.path}`);
+			}
+			const sortedPools = [...fixturePools].sort();
+			return { ...spec, fixturePools: sortedPools };
+		});
+	}
+
 	const metrics: Record<string, number> = {};
 	if (config.orchestration.metricsPath) {
 		const metricsPath = path.isAbsolute(config.orchestration.metricsPath)
@@ -579,7 +613,7 @@ async function runOrchestrate(options: CliOptions): Promise<void> {
 		}
 	}
 
-	const result = orchestrate(specs, options.shards, metrics, config.orchestration);
+	const result = distributeShards(specs, options.shards, metrics, config.orchestration);
 
 	if (options.shardIndex !== undefined) {
 		if (Number.isNaN(options.shardIndex) || options.shardIndex < 0) {
@@ -606,10 +640,41 @@ function readChangedFiles(options: CliOptions): string[] | null {
 	const env = process.env.CHANGED_FILES;
 	if (flag === undefined && env === undefined) return null;
 	const raw = flag ?? env ?? '';
-	return raw
+	const files = raw
 		.split(/[\n,]+/)
 		.map((s) => s.trim())
 		.filter((s) => s.length > 0);
+	// An empty value is "no signal", not "nothing changed". ci-filter emits an
+	// empty list on huge change sets (too large to pass through env/argv); a [] return
+	// would SKIP every package — a false green — so collapse it to null (run full).
+	return files.length > 0 ? files : null;
+}
+
+/** Read a package's own name from its package.json, or undefined if unreadable. */
+function readPackageName(packageDir: string): string | undefined {
+	try {
+		const pkg = JSON.parse(fs.readFileSync(path.join(packageDir, 'package.json'), 'utf-8')) as {
+			name?: unknown;
+		};
+		return typeof pkg.name === 'string' ? pkg.name : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * Resolve the affected-package set for scoping by recomputing from
+ * CHANGED_FILES. Never let a graph-analysis failure break scoping for every
+ * package — degrade to "no signal" (skip on no local changes).
+ */
+function resolveAffectedPackages(rootDir: string, changedFiles: string[] | null): string[] | null {
+	if (changedFiles === null) return null;
+	try {
+		return affectedPackages({ rootDir, changedFiles });
+	} catch (error) {
+		console.warn(`[janitor] Could not compute affected packages: ${(error as Error).message}`);
+		return null;
+	}
 }
 
 function runAffectedPackages(options: CliOptions): void {
@@ -621,35 +686,30 @@ function runAffectedPackages(options: CliOptions): void {
 }
 
 function runTestScopedCmd(options: CliOptions): void {
-	if (!options.runner) {
-		console.error('Error: --runner=jest|vitest is required');
-		process.exit(1);
-	}
 	const packageDir = options.packageDir ?? process.cwd();
+	const rootDir = findWorkspaceRoot(process.cwd());
 	const changedFiles = readChangedFiles(options);
 	const exitCode = runTestScoped({
-		runner: options.runner,
 		packageDir,
-		rootDir: findWorkspaceRoot(process.cwd()),
+		rootDir,
 		changedFiles,
+		packageName: readPackageName(packageDir),
+		affectedPackages: resolveAffectedPackages(rootDir, changedFiles),
 		passthroughArgs: options.passthroughArgs,
-		jestVariant: options.jestVariant,
 	});
 	process.exit(exitCode);
 }
 
 function runScope(options: CliOptions): void {
-	if (!options.runner) {
-		console.error('Error: --runner=jest|vitest is required');
-		process.exit(1);
-	}
-
+	const packageDir = options.packageDir ?? process.cwd();
+	const rootDir = findWorkspaceRoot(process.cwd());
+	const changedFiles = readChangedFiles(options);
 	const result = computeScope({
-		runner: options.runner,
-		packageDir: options.packageDir ?? process.cwd(),
-		changedFiles: readChangedFiles(options),
-		rootDir: findWorkspaceRoot(process.cwd()),
-		jestVariant: options.jestVariant,
+		packageDir,
+		changedFiles,
+		rootDir,
+		packageName: readPackageName(packageDir),
+		affectedPackages: resolveAffectedPackages(rootDir, changedFiles),
 	});
 	console.log(formatScope(result));
 }
@@ -673,7 +733,7 @@ function runMergeCoverage(options: CliOptions): void {
 	const files = fs.existsSync(options.inputsDir) ? findLcovFiles(options.inputsDir) : [];
 	// spec attribution comes from each lcov's TN:; the path is only a fallback.
 	const inputs = files.map((f) => ({ text: fs.readFileSync(f, 'utf8'), spec: f }));
-	const result = mergeCoverage(inputs);
+	const result = buildImpactMap(inputs);
 	fs.writeFileSync(options.outLcov, result.lcov);
 	// Interned on-disk form — spec paths once, referenced by index (~10x smaller).
 	fs.writeFileSync(options.outMap, JSON.stringify(encodeImpactMap(result.impactMap)));
@@ -683,45 +743,43 @@ function runMergeCoverage(options: CliOptions): void {
 	);
 }
 
-/** select-e2e: changed files + impact map → spec list (JSON).
- *
- *  Two layers of safety, both biased to OVER-select (never miss a regression):
- *   - FAIL-OPEN on the map source: a missing/unreadable/corrupt map → broad
- *     (run everything). This is what makes swapping the committed file for a
- *     remote webhook safe — a fetch failure degrades to running the full suite,
- *     never to skipping tests.
- *   - DEFAULT-BROAD on content: any changed file absent from a loaded map → broad.
- */
-function runSelectE2e(options: CliOptions): void {
-	const changed = (readChangedFiles(options) ?? []).map((file) => ({ file }));
-	const allSpecs = options.allSpecsFile
-		? fs
-				.readFileSync(options.allSpecsFile, 'utf8')
-				.split(/[\n,]+/)
-				.map((s) => s.trim())
-				.filter(Boolean)
-		: undefined;
-
-	let map: ImpactMap = {};
-	let failOpen: string | undefined;
-	if (options.mapFile && fs.existsSync(options.mapFile)) {
-		try {
-			const parsed: unknown = JSON.parse(fs.readFileSync(options.mapFile, 'utf8'));
-			// Interned form ({specs, files}) is decoded; a plain ImpactMap is used as-is.
-			const isInterned =
-				typeof parsed === 'object' && parsed !== null && 'specs' in parsed && 'files' in parsed;
-			map = isInterned ? decodeImpactMap(parsed as InternedImpactMap) : (parsed as ImpactMap);
-		} catch (error) {
-			failOpen = `unreadable map: ${String(error)}`;
-		}
-	} else {
-		failOpen = options.mapFile ? `map not found: ${options.mapFile}` : 'no --map provided';
-	}
-
-	// With an empty map every changed file is "unmapped" → resolveImpact returns
-	// broad, so fail-open falls out of the same code path — no special-casing.
-	const result = resolveImpact(changed, map, { allSpecs });
-	console.log(JSON.stringify({ ...result, failOpen }));
+/** select: changed files + impact map → spec list (JSON). I/O wrapper
+ *  around {@link selectTests}, where the fail-open safety contract lives. */
+function runSelect(options: CliOptions): void {
+	const changedFiles = readChangedFiles(options) ?? [];
+	// Content diffs feed the classifiers that need before/after to decide: the
+	// devDependency-only one (manifests), the resolution-key one (tsconfigs) and
+	// the changed-default one (configs). No base ref (local dev) → omit them all,
+	// which each classifier reads as "unproven" and keeps broad.
+	const diffs = (predicate: (file: string) => boolean) =>
+		options.baseRef ? readFileDiffs(changedFiles, options.baseRef, predicate) : undefined;
+	const manifests = diffs(isManifest);
+	// Only parse the (large) lockfile when a RUNTIME dependency actually changed —
+	// the only case the dep-graph selector (389) acts on. A devDep-only manifest
+	// change would parse it for nothing.
+	const runtimeDepsChanged = manifests
+		? changedRuntimeDepsFromManifests(manifests).length > 0
+		: false;
+	const lockfileImporters = runtimeDepsChanged ? readLockfileImporters() : undefined;
+	// The closure classifies override pins; a runtime-dep change already forces
+	// broad, so don't compute it then.
+	const overridesChanged =
+		!runtimeDepsChanged &&
+		Object.values(manifests ?? {}).some(({ before, after }) => {
+			const targets = changedOverrideTargets(before, after);
+			return targets === null || targets.length > 0;
+		});
+	const result = selectTests({
+		changedFiles,
+		mapFile: options.mapFile,
+		allSpecsFile: options.allSpecsFile,
+		manifests,
+		tsconfigs: diffs(isTsconfig),
+		configs: diffs(isBackendConfig),
+		lockfileImporters,
+		runtimeClosure: overridesChanged ? readRuntimeClosure() : undefined,
+	});
+	console.log(JSON.stringify(result));
 }
 
 async function main(): Promise<void> {
@@ -751,7 +809,7 @@ async function main(): Promise<void> {
 			case 'discover':
 				showDiscoverHelp();
 				break;
-			case 'orchestrate':
+			case 'distribute':
 				showOrchestrateHelp();
 				break;
 			case 'affected-packages':
@@ -786,8 +844,8 @@ async function main(): Promise<void> {
 		runMergeCoverage(options);
 		return;
 	}
-	if (options.command === 'select-e2e') {
-		runSelectE2e(options);
+	if (options.command === 'select') {
+		runSelect(options);
 		return;
 	}
 
@@ -828,8 +886,8 @@ async function main(): Promise<void> {
 		case 'discover':
 			runDiscover();
 			break;
-		case 'orchestrate':
-			await runOrchestrate(options);
+		case 'distribute':
+			await runDistribute(options);
 			break;
 		case 'filter-shard':
 			await runFilterShard(options);

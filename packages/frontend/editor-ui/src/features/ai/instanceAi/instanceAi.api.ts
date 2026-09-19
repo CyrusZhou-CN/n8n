@@ -1,11 +1,26 @@
 import { makeRestApiRequest } from '@n8n/rest-api-client';
 import type { IRestApiContext } from '@n8n/rest-api-client';
 import type {
+	ComputerUseChannel,
 	InstanceAiAttachment,
+	InstanceAiBrowserCreateLinkResponse,
+	InstanceAiBrowserStatusResponse,
 	InstanceAiEnsureThreadResponse,
 	InstanceAiSendMessageResponse,
 	InstanceAiConfirmRequest,
+	InstanceAiConfirmResponse,
+	InstanceAiCredits,
+	InstanceAiHandoffContext,
+	InstanceAiThreadOrigin,
+	InstanceAiThreadSource,
+	InstanceAiThreadArtifactsContext,
 } from '@n8n/api-types';
+
+export interface InstanceAiThreadLaunchInput {
+	source: InstanceAiThreadSource;
+	origin?: InstanceAiThreadOrigin;
+	sourceContext?: Record<string, unknown>;
+}
 
 /**
  * POST /instance-ai/chat/:threadId -> { runId }
@@ -16,8 +31,11 @@ export async function postMessage(
 	threadId: string,
 	message: string,
 	attachments?: InstanceAiAttachment[],
+	handoffContext?: InstanceAiHandoffContext,
 	timeZone?: string,
 	pushRef?: string,
+	computerUseChannels?: ComputerUseChannel[],
+	threadArtifacts?: InstanceAiThreadArtifactsContext,
 ): Promise<InstanceAiSendMessageResponse> {
 	return await makeRestApiRequest<InstanceAiSendMessageResponse>(
 		context,
@@ -26,23 +44,26 @@ export async function postMessage(
 		{
 			message,
 			...(attachments && attachments.length > 0 ? { attachments } : {}),
+			...(handoffContext ? { context: handoffContext } : {}),
 			...(timeZone ? { timeZone } : {}),
 			...(pushRef ? { pushRef } : {}),
+			...(computerUseChannels ? { computerUseChannels } : {}),
+			...(threadArtifacts ? { threadArtifacts } : {}),
 		},
 	);
 }
 
 export async function ensureThread(
 	context: IRestApiContext,
-	threadId?: string,
+	threadId: string,
+	projectId: string,
+	launch: InstanceAiThreadLaunchInput,
 ): Promise<InstanceAiEnsureThreadResponse> {
 	return await makeRestApiRequest<InstanceAiEnsureThreadResponse>(
 		context,
 		'POST',
 		'/instance-ai/threads',
-		{
-			...(threadId ? { threadId } : {}),
-		},
+		{ threadId, projectId, ...launch },
 	);
 }
 
@@ -94,22 +115,22 @@ export async function postConfirmation(
 	context: IRestApiContext,
 	requestId: string,
 	payload: InstanceAiConfirmRequest,
-): Promise<void> {
-	await makeRestApiRequest(context, 'POST', `/instance-ai/confirm/${requestId}`, payload);
+): Promise<InstanceAiConfirmResponse> {
+	return await makeRestApiRequest<InstanceAiConfirmResponse>(
+		context,
+		'POST',
+		`/instance-ai/confirm/${requestId}`,
+		payload,
+	);
 }
 
 /**
- * GET /instance-ai/credits -> { creditsQuota, creditsClaimed }
- * Returns -1 quota when proxy is disabled.
+ * GET /instance-ai/credits -> { creditsQuota, creditsClaimed, quotaLocked }
+ * Returns -1 quota when the proxy is disabled, and also for the activation-capped trial cohort,
+ * whose balance is never shown — for them `quotaLocked` is the only usage signal.
  */
-export async function getInstanceAiCredits(
-	context: IRestApiContext,
-): Promise<{ creditsQuota: number; creditsClaimed: number }> {
-	return await makeRestApiRequest<{ creditsQuota: number; creditsClaimed: number }>(
-		context,
-		'GET',
-		'/instance-ai/credits',
-	);
+export async function getInstanceAiCredits(context: IRestApiContext): Promise<InstanceAiCredits> {
+	return await makeRestApiRequest<InstanceAiCredits>(context, 'GET', '/instance-ai/credits');
 }
 
 /**
@@ -138,6 +159,43 @@ export async function createGatewayLink(context: IRestApiContext): Promise<{
  */
 export async function disconnectGatewaySession(context: IRestApiContext): Promise<void> {
 	await makeRestApiRequest(context, 'POST', '/instance-ai/gateway/disconnect-session');
+}
+
+/**
+ * POST /instance-ai/browser/create-link -> { connectUrl, expiresAt, ttlSeconds }
+ * Create (or refresh) a direct browser session and return the opaque URL that
+ * opens the Browser Use extension connect page.
+ */
+export async function createBrowserLink(
+	context: IRestApiContext,
+): Promise<InstanceAiBrowserCreateLinkResponse> {
+	return await makeRestApiRequest<InstanceAiBrowserCreateLinkResponse>(
+		context,
+		'POST',
+		'/instance-ai/browser/create-link',
+	);
+}
+
+/**
+ * GET /instance-ai/browser/status -> { connected, connectedAt, toolCategories }
+ * Check whether the Browser Use extension is connected directly to the server.
+ */
+export async function getBrowserStatus(
+	context: IRestApiContext,
+): Promise<InstanceAiBrowserStatusResponse> {
+	return await makeRestApiRequest<InstanceAiBrowserStatusResponse>(
+		context,
+		'GET',
+		'/instance-ai/browser/status',
+	);
+}
+
+/**
+ * POST /instance-ai/browser/disconnect-session -> { ok }
+ * Tear down the current user's direct browser session.
+ */
+export async function disconnectBrowserSession(context: IRestApiContext): Promise<void> {
+	await makeRestApiRequest(context, 'POST', '/instance-ai/browser/disconnect-session');
 }
 
 /**

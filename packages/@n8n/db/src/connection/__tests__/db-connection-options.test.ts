@@ -1,7 +1,7 @@
 import type { ModuleRegistry } from '@n8n/backend-common';
 import type { GlobalConfig, InstanceSettingsConfig } from '@n8n/config';
-import { mock } from 'jest-mock-extended';
 import path from 'path';
+import { mock } from 'vitest-mock-extended';
 
 import { postgresMigrations } from '../../migrations/postgresdb';
 import { sqliteMigrations } from '../../migrations/sqlite';
@@ -24,7 +24,7 @@ describe('DbConnectionOptions', () => {
 		moduleRegistry,
 	);
 
-	beforeEach(() => jest.resetAllMocks());
+	beforeEach(() => vi.resetAllMocks());
 
 	const commonOptions = {
 		entityPrefix: 'test_prefix_',
@@ -85,6 +85,7 @@ describe('DbConnectionOptions', () => {
 					schema: 'test_schema',
 					poolSize: 5,
 					connectionTimeoutMs: 15_000,
+					destroyTimeoutMs: 10_000,
 					idleTimeoutMs: 25_000,
 					statementTimeoutMs: 60_000,
 					maxConnectionLifetimeMs: 1_800_000,
@@ -122,6 +123,7 @@ describe('DbConnectionOptions', () => {
 						keepAlive: false,
 						keepAliveInitialDelayMillis: 5_000,
 						maxLifetimeSeconds: 1800,
+						connectionTimeoutMillis: 15_000,
 					},
 				});
 			});
@@ -155,6 +157,22 @@ describe('DbConnectionOptions', () => {
 				const result = dbConnectionOptions.getOptions();
 
 				expect(result.extra).toMatchObject({ maxLifetimeSeconds: 1 });
+			});
+
+			it('should set connectionTimeoutMillis in extra when connectionTimeoutMs is positive', () => {
+				dbConfig.postgresdb.connectionTimeoutMs = 15_000;
+
+				const result = dbConnectionOptions.getOptions();
+
+				expect(result.extra).toMatchObject({ connectionTimeoutMillis: 15_000 });
+			});
+
+			it('should omit connectionTimeoutMillis when connectionTimeoutMs is 0', () => {
+				dbConfig.postgresdb.connectionTimeoutMs = 0;
+
+				const result = dbConnectionOptions.getOptions();
+
+				expect(result.extra).not.toHaveProperty('connectionTimeoutMillis');
 			});
 		});
 

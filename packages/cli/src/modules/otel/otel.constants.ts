@@ -1,4 +1,23 @@
+import { OTLP_PROTOCOLS, type OtlpProtocol } from '@n8n/api-types';
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
+
+export { OTLP_PROTOCOLS, type OtlpProtocol };
+
+export const OTEL_ENV_VARS = {
+	enabled: 'N8N_OTEL_ENABLED',
+	exporterProtocol: 'N8N_OTEL_EXPORTER_OTLP_PROTOCOL',
+	exporterEndpoint: 'N8N_OTEL_EXPORTER_OTLP_ENDPOINT',
+	exporterTracingPath: 'N8N_OTEL_EXPORTER_OTLP_TRACING_PATH',
+	exporterHeaders: 'N8N_OTEL_EXPORTER_OTLP_HEADERS',
+	exporterServiceName: 'N8N_OTEL_EXPORTER_SERVICE_NAME',
+	tracesSampleRate: 'N8N_OTEL_TRACES_SAMPLE_RATE',
+	startupConnectivityTimeoutMs: 'N8N_OTEL_STARTUP_CONNECTIVITY_TIMEOUT_MS',
+	includeNodeSpans: 'N8N_OTEL_TRACES_INCLUDE_NODE_SPANS',
+	injectOutbound: 'N8N_OTEL_TRACES_INJECT_OUTBOUND',
+	productionExecutionsOnly: 'N8N_OTEL_TRACES_PRODUCTION_ONLY',
+} as const;
+
+export const OTEL_TEST_SPAN_NAME = 'n8n.test_trace';
 
 export const ATTR = {
 	OTEL_SERVICE_NAME: ATTR_SERVICE_NAME,
@@ -6,6 +25,8 @@ export const ATTR = {
 
 	INSTANCE_ID: 'n8n.instance.id',
 	INSTANCE_ROLE: 'n8n.instance.role',
+
+	IS_TEST_TRACE: 'n8n.test',
 
 	PROJECT_ID: 'n8n.project.id',
 

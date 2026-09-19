@@ -9,6 +9,7 @@ import type {
 	ICredentials,
 	ICredentialsExpressionResolveValues,
 	IExecuteData,
+	IGetDecryptedCredentialsOptions,
 	IHttpRequestHelper,
 	IHttpRequestOptions,
 	INode,
@@ -42,8 +43,8 @@ export class EvalMockedCredentialsHelper extends ICredentialsHelper {
 
 	constructor(
 		private readonly inner: ICredentialsHelper,
-		private readonly serverUrl?: string,
-		private readonly logger?: Logger,
+		private readonly serverUrl: string | undefined,
+		private readonly logger: Logger,
 		private readonly subNodeToRoot?: ReadonlyMap<string, string>,
 	) {
 		super();
@@ -107,6 +108,7 @@ export class EvalMockedCredentialsHelper extends ICredentialsHelper {
 		executeData?: IExecuteData,
 		raw?: boolean,
 		expressionResolveValues?: ICredentialsExpressionResolveValues,
+		options?: IGetDecryptedCredentialsOptions,
 	): Promise<ICredentialDataDecryptedObject> {
 		// Id-less refs make the inner helper throw UnexpectedError (not CredentialNotFoundError),
 		// which the catch below won't handle — synthesize a mock here instead of delegating.
@@ -133,6 +135,7 @@ export class EvalMockedCredentialsHelper extends ICredentialsHelper {
 				executeData,
 				raw,
 				expressionResolveValues,
+				options,
 			);
 		} catch (error) {
 			if (!(error instanceof CredentialNotFoundError)) throw error;
@@ -160,7 +163,7 @@ export class EvalMockedCredentialsHelper extends ICredentialsHelper {
 		if (!mapping) {
 			// No rewrite mapping — vendor SDK will hit its default URL. Refused upfront
 			// by assertUnpinCompatibility for LLM sub-nodes; this branch is for non-LLM HTTP creds.
-			this.logger?.warn(
+			this.logger.warn(
 				`[EvalMock] No URL rewrite mapping for credential type "${type}" — ` +
 					`vendor traffic from "${executeData?.node?.name ?? 'unknown'}" will hit the real provider.`,
 			);
@@ -174,7 +177,7 @@ export class EvalMockedCredentialsHelper extends ICredentialsHelper {
 		if (subNodeName && !rootName && this.subNodeToRoot) {
 			// Sub-node not in routing map — unexpected topology; wire server's
 			// unrouted-/v1 handler will surface this loudly too.
-			this.logger?.warn(
+			this.logger.warn(
 				`[EvalMock] No vendor LLM routing entry for sub-node "${subNodeName}" — ` +
 					'wire-server attribution will be unrouted. Check buildVendorLlmRouting coverage.',
 			);

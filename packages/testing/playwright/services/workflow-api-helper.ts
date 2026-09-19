@@ -1,5 +1,6 @@
+import type { APIResponse } from '@playwright/test';
 import { readFileSync } from 'fs';
-import type { IWorkflowBase, ExecutionSummary } from 'n8n-workflow';
+import { isTerminalExecutionStatus, type IWorkflowBase, type ExecutionSummary } from 'n8n-workflow';
 import { nanoid } from 'nanoid';
 
 // Type for execution responses from the n8n API
@@ -22,11 +23,17 @@ type WorkflowImportResult = {
 	webhookMethod?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'HEAD';
 };
 
+/** Engine 2.0 mints uuidv7 execution ids; the legacy engine mints numbers. */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export class WorkflowApiHelper {
 	constructor(private api: ApiHelpers) {}
 
-	async createWorkflow(workflow: Partial<IWorkflowBase>) {
-		const response = await this.api.request.post('/rest/workflows', { data: workflow });
+	async createWorkflow(workflow: Partial<IWorkflowBase>, projectId?: string) {
+		const data = this.withDefaultSettings(workflow);
+		const response = await this.api.request.post('/rest/workflows', {
+			data: projectId ? { ...data, projectId } : data,
+		});
 
 		if (!response.ok()) {
 			throw new TestError(`Failed to create workflow: ${await response.text()}`);
@@ -46,7 +53,7 @@ export class WorkflowApiHelper {
 	): Promise<{ name: string; id: string; versionId: string }> {
 		const workflowName = options?.name ?? `Test Workflow ${nanoid(8)}`;
 
-		const workflow = {
+		const workflow = this.withDefaultSettings({
 			name: workflowName,
 			nodes: [],
 			connections: {},
@@ -54,7 +61,7 @@ export class WorkflowApiHelper {
 			active: false,
 			projectId: project,
 			...(options?.folder && { parentFolderId: options.folder }),
-		};
+		});
 
 		const response = await this.api.request.post('/rest/workflows', { data: workflow });
 
@@ -70,6 +77,14 @@ export class WorkflowApiHelper {
 			id: workflowData.id,
 			versionId: workflowData.versionId,
 		};
+	}
+
+	/** The stack-wide defaults win, so a spec proves parity on whatever engine the stack runs. */
+	private withDefaultSettings<T extends Partial<IWorkflowBase>>(workflow: T): T {
+		const defaults = this.api.options.workflowSettings;
+		if (!defaults) return workflow;
+
+		return { ...workflow, settings: { ...workflow.settings, ...defaults } };
 	}
 
 	async activate(workflowId: string, versionId: string) {
@@ -115,7 +130,64 @@ export class WorkflowApiHelper {
 		}
 
 		const result = await response.json();
-		return result.data ?? result;
+		const run = (result.data ?? result) as { executionId: string };
+		this.assertRoutedToEngine(run.executionId);
+		return run;
+	}
+
+	/**
+	 * Fails a run that the stack meant for engine 2.0 but the control plane kept.
+	 * A v1 id is numeric and a v2 id is a uuid, which the engine validates on the
+	 * wire (`packages/cli/src/executions/execution-id.ts`), so the shape says
+	 * which plane ran it. Without this a workflow that missed `engineType` runs
+	 * on v1 and the spec still passes, which is parity evidence that proves
+	 * nothing.
+	 *
+	 * Only the manual-run entry point is checked. A spec that starts a run
+	 * through a webhook or a trigger gets no such guard yet.
+	 */
+	private assertRoutedToEngine(executionId: string): void {
+		if (this.api.options.workflowSettings?.engineType !== 'v2') return;
+		if (UUID.test(executionId)) return;
+
+		throw new TestError(
+			`Expected an engine 2.0 execution id, got "${executionId}", so the run stayed on the ` +
+				'legacy engine. Either the workflow missed `settings.engineType`, which ' +
+				'`api.workflows` applies from the stack, or this main does not run the `engine-v2` ' +
+				'module.',
+		);
+	}
+
+	/**
+	 * Like {@link runManually}, but accepts an explicit workflow payload and
+	 * returns the raw response instead of throwing — for asserting the run
+	 * status or starting from a trigger with custom `workflowData`.
+	 */
+	async runRaw(
+		workflowId: string,
+		options: { workflowData?: Partial<IWorkflowBase>; triggerNodeName: string },
+	): Promise<APIResponse> {
+		return await this.api.request.post(`/rest/workflows/${workflowId}/run`, {
+			data: {
+				...(options.workflowData ? { workflowData: options.workflowData } : {}),
+				triggerToStartFrom: { name: options.triggerNodeName },
+			},
+		});
+	}
+
+	/**
+	 * Like {@link update}, but returns the raw response instead of throwing on a
+	 * non-2xx status — for asserting a specific status code (e.g. the `422` from
+	 * the redaction floor-enforcement guard).
+	 */
+	async updateRaw(
+		workflowId: string,
+		versionId: string,
+		data: Partial<IWorkflowBase>,
+	): Promise<APIResponse> {
+		return await this.api.request.patch(`/rest/workflows/${workflowId}`, {
+			data: { ...data, versionId },
+		});
 	}
 
 	async deactivate(workflowId: string) {
@@ -172,6 +244,15 @@ export class WorkflowApiHelper {
 
 		const result = await response.json();
 		return result.data ?? result;
+	}
+
+	/**
+	 * Like {@link getWorkflow}, but returns the raw response instead of throwing
+	 * on a non-2xx status — for asserting a specific status code (e.g. the `403`
+	 * a member gets when fetching a workflow they can't access).
+	 */
+	async getWorkflowRaw(workflowId: string): Promise<APIResponse> {
+		return await this.api.request.get(`/rest/workflows/${workflowId}`);
 	}
 
 	async transfer(workflowId: string, destinationProjectId: string) {
@@ -264,13 +345,18 @@ export class WorkflowApiHelper {
 	/** Creates a workflow from definition, making it unique for testing. */
 	async createWorkflowFromDefinition(
 		workflow: Partial<IWorkflowBase>,
-		options?: { webhookPrefix?: string; idLength?: number; makeUnique?: boolean },
+		options?: {
+			webhookPrefix?: string;
+			idLength?: number;
+			makeUnique?: boolean;
+			projectId?: string;
+		},
 	): Promise<WorkflowImportResult> {
-		const { makeUnique = true, ...rest } = options ?? {};
+		const { makeUnique = true, projectId, ...rest } = options ?? {};
 		const { webhookPath, webhookId, webhookMethod } = makeUnique
 			? this.makeWorkflowUnique(workflow, rest)
 			: { webhookPath: undefined, webhookId: undefined, webhookMethod: undefined };
-		const createdWorkflow = await this.createWorkflow(workflow);
+		const createdWorkflow = await this.createWorkflow(workflow, projectId);
 		const workflowId: string = String(createdWorkflow.id);
 
 		return {
@@ -289,6 +375,7 @@ export class WorkflowApiHelper {
 			webhookPrefix?: string;
 			idLength?: number;
 			makeUnique?: boolean;
+			projectId?: string;
 			transform?: (workflow: Partial<IWorkflowBase>) => Partial<IWorkflowBase>;
 		},
 	): Promise<WorkflowImportResult> {
@@ -306,7 +393,12 @@ export class WorkflowApiHelper {
 
 	async importWorkflowFromDefinition(
 		workflowDefinition: Partial<IWorkflowBase>,
-		options?: { webhookPrefix?: string; idLength?: number; makeUnique?: boolean },
+		options?: {
+			webhookPrefix?: string;
+			idLength?: number;
+			makeUnique?: boolean;
+			projectId?: string;
+		},
 	): Promise<WorkflowImportResult> {
 		const result = await this.createWorkflowFromDefinition(workflowDefinition, options);
 
@@ -337,8 +429,11 @@ export class WorkflowApiHelper {
 		return [];
 	}
 
-	async getExecution(executionId: string): Promise<ExecutionListResponse> {
-		const response = await this.api.request.get(`/rest/executions/${executionId}`);
+	async getExecution(
+		executionId: string,
+		options?: { redactExecutionData?: boolean },
+	): Promise<ExecutionListResponse> {
+		const response = await this.getExecutionRaw(executionId, options);
 
 		if (!response.ok()) {
 			throw new TestError(`Failed to get execution: ${await response.text()}`);
@@ -346,6 +441,63 @@ export class WorkflowApiHelper {
 
 		const result = await response.json();
 		return result.data ?? result;
+	}
+
+	/**
+	 * Polls one execution by id until it settles. {@link waitForExecution} watches
+	 * the list for a row that was not there before and matches it by mode, which
+	 * needs the list to page and order the way it expects. This takes the id the
+	 * run already returned, so nothing about the list can mislead it.
+	 */
+	async waitForExecutionById(
+		executionId: string,
+		timeoutMs = 10000,
+		pollIntervalMs = 250,
+	): Promise<ExecutionListResponse> {
+		const deadline = Date.now() + timeoutMs;
+
+		let execution = await this.getExecution(executionId);
+		while (!isTerminalExecutionStatus(execution.status)) {
+			// Stryker disable next-line EqualityOperator: `>` differs only on the exact
+			// deadline millisecond, which costs fake timers to reach and proves nothing.
+			if (Date.now() >= deadline) {
+				throw new TestError(
+					`Execution ${executionId} did not settle within ${timeoutMs}ms (status: ${execution.status})`,
+				);
+			}
+			await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+			execution = await this.getExecution(executionId);
+		}
+
+		return execution;
+	}
+
+	/** Stops a running or waiting execution and returns the stopped execution summary. */
+	async stopExecution(executionId: string): Promise<ExecutionListResponse> {
+		const response = await this.api.request.post(`/rest/executions/${executionId}/stop`);
+
+		if (!response.ok()) {
+			throw new TestError(`Failed to stop execution: ${await response.text()}`);
+		}
+
+		const result = await response.json();
+		return result.data ?? result;
+	}
+
+	/**
+	 * Like {@link getExecution}, but returns the raw response instead of throwing
+	 * on a non-2xx status — for asserting a specific status code (e.g. the `403`
+	 * from the `execution:reveal` scope guard on `?redactExecutionData=false`).
+	 */
+	async getExecutionRaw(
+		executionId: string,
+		options?: { redactExecutionData?: boolean },
+	): Promise<APIResponse> {
+		const params = new URLSearchParams();
+		if (options?.redactExecutionData !== undefined) {
+			params.set('redactExecutionData', String(options.redactExecutionData));
+		}
+		return await this.api.request.get(`/rest/executions/${executionId}`, { params });
 	}
 
 	async waitForExecution(
@@ -403,7 +555,7 @@ export class WorkflowApiHelper {
 			const executions = await this.getExecutions(workflowId);
 			const execution = executions.find((e) => e.workflowId === workflowId);
 
-			if (execution && execution.status === expectedStatus) {
+			if (execution?.status === expectedStatus) {
 				return execution;
 			}
 
