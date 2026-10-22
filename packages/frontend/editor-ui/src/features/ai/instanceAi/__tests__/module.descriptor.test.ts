@@ -57,7 +57,7 @@ function setGlobalScopes(scopes: Scope[]) {
 
 const instanceAiModuleSettings: NonNullable<FrontendModuleSettings['instance-ai']> = {
 	enabled: true,
-	localGatewayDisabled: false,
+	mcpConnectionsAvailable: true,
 	browserUseEnabled: true,
 	proxyEnabled: false,
 	cloudManaged: false,
