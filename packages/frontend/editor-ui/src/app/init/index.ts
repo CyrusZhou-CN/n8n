@@ -41,6 +41,7 @@ import { hasPermission } from '@/app/utils/rbac/permissions';
 import { initializeExpressionEngine } from '@/app/init/expressionEngine';
 import {
 	initializeQuickJsExpressionShadow,
+	preloadQuickJsExpressionShadow,
 	stopQuickJsExpressionShadow,
 } from '@/experiments/quickjsExpressionShadow/init';
 import { useCredentialsStore } from '@/features/credentials/credentials.store';
@@ -49,6 +50,32 @@ export const state = {
 	initialized: false,
 };
 let authenticatedFeaturesInitialized = false;
+
+/** Shows a toast that stays open and tells the user that the editor cannot connect to n8n. */
+function showStartupErrorToast() {
+	const i18n = useI18n();
+
+	useToast().showToast({
+		title: i18n.baseText('startupError'),
+		message: i18n.baseText('startupError.message'),
+		type: 'error',
+		duration: 0,
+	});
+}
+
+/**
+ * Replaces the settings in the store with the full settings of the signed-in user.
+ * On a page with embedded settings, this is the only request for the full settings.
+ * A failure shows the startup error toast, then rejects.
+ */
+async function loadFullSettings() {
+	try {
+		await useSettingsStore().getSettings();
+	} catch (error) {
+		showStartupErrorToast();
+		throw error;
+	}
+}
 
 /**
  * Initializes the core application stores and hooks
@@ -66,9 +93,6 @@ export async function initializeCore() {
 	const usersStore = useUsersStore();
 	const ssoStore = useSSOStore();
 
-	const toast = useToast();
-	const i18n = useI18n();
-
 	registerAuthenticationHooks();
 
 	/**
@@ -79,21 +103,15 @@ export async function initializeCore() {
 		await settingsStore.initialize();
 	} catch (error) {
 		console.error('Failed to initialize settings store', error);
-		toast.showToast({
-			title: i18n.baseText('startupError'),
-			message: i18n.baseText('startupError.message'),
-			type: 'error',
-			duration: 0,
-		});
+		showStartupErrorToast();
 	}
 
-	// Must run before any view renders: expressions evaluate as soon as workflow
-	// data is displayed, and the engine has to be in place by then.
-	try {
-		await initializeExpressionEngine(settingsStore.settings.expressionEngine);
-	} catch (error) {
+	// Not awaited here, so the engine files download while the user and the full settings load.
+	const expressionEngineStart = initializeExpressionEngine(
+		settingsStore.settings.expressionEngine,
+	).catch((error) => {
 		console.error('Failed to initialize the expression engine', error);
-	}
+	});
 
 	ssoStore.initialize({
 		authenticationMethod: settingsStore.userManagement.authenticationMethod as AuthenticationMethod,
@@ -108,6 +126,14 @@ export async function initializeCore() {
 
 	if (!settingsStore.isPreviewMode) {
 		await usersStore.initialize();
+	}
+
+	// Expressions evaluate as soon as workflow data is displayed, so the engine must
+	// be in place before such a view renders. A page without a signed-in user shows
+	// no workflow data, and the login hook waits for the engine after sign-in.
+	const showsWorkflowData = settingsStore.isPreviewMode || usersStore.currentUser !== null;
+	if (showsWorkflowData) {
+		await expressionEngineStart;
 	}
 
 	void useExternalHooks().run('app.mount');
@@ -240,11 +266,31 @@ export async function initializeAuthenticatedFeatures(
 		void versionsStore.checkForNewVersions();
 	}
 
+	const loadTypes = async () => {
+		// The node types store reads from the data worker, so the worker must be initialized first.
+		if (isDataWorkerEnabled()) {
+			const coordinator = await import('@/app/workers');
+			await coordinator.initialize({ version: settingsStore.settings.versionCli });
+			await coordinator.loadNodeTypes(rootStore.baseUrl);
+		}
+
+		const results = await Promise.allSettled([
+			nodeTypesStore.loadNodeTypesIfNotLoaded(),
+			credentialsStore.fetchCredentialTypes(false),
+		]);
+		results.forEach((result) => {
+			if (result.status === 'rejected') {
+				console.error('Failed to initialize n8n types', result.reason);
+			}
+		});
+	};
+
 	await Promise.all([
 		projectsStore.getMyProjects(),
 		projectsStore.getPersonalProject(),
 		projectsStore.getProjectsCount(),
 		rolesStore.fetchRoles(),
+		loadTypes(),
 	]);
 
 	await projectsStore.refreshCurrentProject();
@@ -261,17 +307,10 @@ export async function initializeAuthenticatedFeatures(
 	registerModuleCommands();
 	registerModuleParameterInputs();
 
-	// Initialize run data worker and load node types
-	if (isDataWorkerEnabled()) {
-		const coordinator = await import('@/app/workers');
-		await coordinator.initialize({ version: settingsStore.settings.versionCli });
-		await coordinator.loadNodeTypes(rootStore.baseUrl);
-	}
-	await Promise.all([
-		nodeTypesStore.loadNodeTypesIfNotLoaded(),
-		credentialsStore.fetchAllCredentials(),
-		credentialsStore.fetchCredentialTypes(false),
-	]);
+	void credentialsStore.fetchAllCredentials().catch((error) => {
+		// fail silently: this is a pre-fetch, app will call this again later
+		console.error('Failed to fetch credentials', error);
+	});
 
 	authenticatedFeaturesInitialized = true;
 }
@@ -290,11 +329,11 @@ function registerAuthenticationHooks() {
 	const favoritesStore = useFavoritesStore();
 
 	usersStore.registerLoginHook(async (user) => {
-		await settingsStore.getSettings();
+		// Before the settings request, so the QuickJS files download while the settings load.
+		preloadQuickJsExpressionShadow(user.featureFlags);
+		await loadFullSettings();
 
-		// Start the expression engine now if the app booted unauthenticated.
-		// Public settings omit the engine, so `initializeCore` left the legacy
-		// evaluator in place; this is the first point where the choice is known.
+		// Start the expression engine now if the boot could not read the settings.
 		// Nothing evaluates an expression before login, so this is early enough.
 		try {
 			await initializeExpressionEngine(settingsStore.settings.expressionEngine);
